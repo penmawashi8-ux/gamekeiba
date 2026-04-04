@@ -184,11 +184,13 @@ class Game:
             logger.info("日本語フォント: %s", font_path)
         else:
             logger.warning("日本語フォントが見つかりません（英語表示になります）")
+        self.f_xs  = _load_font(font_path, 15)  # 小テーブル用
         self.f_sm  = _load_font(font_path, 18)
         self.f_md  = _load_font(font_path, 24)
         self.f_lg  = _load_font(font_path, 32)
         self.f_xl  = _load_font(font_path, 46)
         self.f_num = _load_font(font_path, 20)  # 馬番用
+        self.f_num_sm = _load_font(font_path, 15)  # レースパネル内の馬名用
 
         # フェーズ状態
         self.phase: Phase = Phase.BETTING
@@ -295,6 +297,7 @@ class Game:
 
         # 残高を先に引く
         new_bal = self.user_manager.update_balance(cmd.channel_id, -amount)
+        self._real_bettors.add(cmd.channel_id)  # 実ユーザーとして記録
 
         if cmd.command_type == CMD_WIN:
             self.betting_manager.place_win_bet(
@@ -348,6 +351,10 @@ class Game:
         self.phase       = Phase.BETTING
         self.phase_start = time.time()
 
+        # Bot自動参加管理
+        self._real_bettors: set = set()   # 実際に馬券を購入したユーザーのchannel_id
+        self._bot_triggered: bool = False  # 締め切り30秒前のBot出動済みフラグ
+
         # テストクライアントのベット受付フラグを立てる
         if self.test_client and hasattr(self.test_client, "betting_active"):
             self.test_client.betting_active.set()
@@ -359,9 +366,45 @@ class Game:
 
     def _update_betting(self):
         """馬券フェーズの更新（タイムアップでレース開始）"""
-        if self._betting_remaining() <= 0:
+        remaining = self._betting_remaining()
+        if remaining <= 0:
             self._start_racing_phase()
+            return
 
+        # 締め切り30秒前・実ユーザー3人以下のときBotが自動参加（1回のみ）
+        if (not self._bot_triggered
+                and remaining <= 30.0
+                and len(self._real_bettors) <= 3):
+            self._trigger_bots()
+            self._bot_triggered = True
+
+
+    def _trigger_bots(self):
+        """
+        ダミーユーザー Bot_1〜Bot_5 が自動的に馬券を購入する。
+
+        参加者が少ない場合にオッズを成立させるために使用。
+        Botの残高は無限（DB登録・払い戻しなし）。
+        """
+        bot_names = ["Bot_1", "Bot_2", "Bot_3", "Bot_4", "Bot_5"]
+        for bot_name in bot_names:
+            bot_id = f"BOT_{bot_name[-1]}"   # "BOT_1" 〜 "BOT_5"
+            num_bets = random.randint(1, 3)
+            for _ in range(num_bets):
+                amount = random.choice([100, 200, 300, 500, 1000])
+                if random.random() < 0.55:
+                    # 単勝
+                    horse = random.randint(1, NUM_HORSES)
+                    self.betting_manager.place_win_bet(bot_id, bot_name, horse, amount)
+                    self._add_message(f"{bot_name}: !単勝 {horse} {amount:,}")
+                else:
+                    # 馬連
+                    h1, h2 = random.sample(range(1, NUM_HORSES + 1), 2)
+                    self.betting_manager.place_quinella_bet(
+                        bot_id, bot_name, h1, h2, amount)
+                    self._add_message(f"{bot_name}: !馬連 {h1} {h2} {amount:,}")
+
+        logger.info("Bot自動参加（実ユーザー %d人）", len(self._real_bettors))
 
     # ──────────────────────────────────────────────
     # レースフェーズ
@@ -421,9 +464,11 @@ class Game:
         second = self.finish_order[1].number
         logger.info("着順: 1着=%d番, 2着=%d番", first, second)
 
-        # 払い戻し計算・残高反映
+        # 払い戻し計算・残高反映（Botは払い戻し不要）
         self.payout_results = self.betting_manager.calculate_payouts(first, second)
         for pr in self.payout_results:
+            if pr.channel_id.startswith("BOT_"):
+                continue  # ダミーユーザーへの払い戻しはスキップ
             self.user_manager.update_balance(pr.channel_id, pr.payout_amount)
             logger.info("払い戻し: %s %d円（%.1f倍）",
                         pr.display_name, pr.payout_amount, pr.odds)
@@ -495,74 +540,74 @@ class Game:
 
         win_odds = self.betting_manager.get_win_odds()
 
-        # テーブルヘッダー（馬番 / 馬名 / 強さ / 脚質 / オッズ / 売上）
-        #   lx+0  lx+30  lx+115  lx+195  lx+225  lx+305  lx+385
-        COL_HEADER_LABELS = [
-            ("馬番", 30), ("馬名", 85), ("強さ", 80),
-            ("脚", 30), ("オッズ", 80), ("売上", 80),
-        ]
-        hx = lx + 5
-        for label, w in COL_HEADER_LABELS:
-            self.screen.blit(self.f_sm.render(label, True, COL_DIM), (hx, ly))
-            hx += w
-        ly += 22
-        pygame.draw.line(self.screen, COL_BORDER, (lx, ly), (lx + 430, ly), 1)
-        ly += 4
+        # ── 列の絶対X座標（lxからのオフセット）──────────────────
+        # f_xs(15px)基準: 日本語1文字≒15px、数字≒9px
+        TX_NUM   = lx + 5    # 馬番バッジ（幅24）
+        TX_NAME  = lx + 32   # 馬名（最大9文字 × 15px = 135px → 幅148）
+        TX_STARS = lx + 183  # 強さ★（5文字 × 15px = 75px → 幅82）
+        TX_STYLE = lx + 268  # 脚質略称（1文字 → 幅26）
+        TX_ODDS  = lx + 297  # オッズ（幅78）
+        TX_POOL  = lx + 378  # 売上（幅70）
+        TABLE_W  = 450        # 表全幅
+
+        # テーブルヘッダー
+        for label, tx in [
+            ("馬番", TX_NUM), ("馬名", TX_NAME), ("強さ", TX_STARS),
+            ("脚", TX_STYLE), ("オッズ", TX_ODDS), ("売上", TX_POOL),
+        ]:
+            self.screen.blit(self.f_xs.render(label, True, COL_DIM), (tx, ly))
+        ly += 20
+        pygame.draw.line(self.screen, COL_BORDER, (lx, ly), (lx + TABLE_W, ly), 1)
+        ly += 3
 
         win_pool = self.betting_manager.get_win_pool_total()
         for horse in self.horses:
             odds = win_odds.get(horse.number)
             pool = self.betting_manager._win_pool.get(horse.number, 0)
+            row_y = ly + 1
 
-            cx = lx + 5   # 各列の描画 X 起点
-
-            # 馬番色バッジ
-            badge = pygame.Rect(cx, ly + 1, 18, 18)
+            # 馬番カラーバッジ
+            badge = pygame.Rect(TX_NUM, row_y, 20, 18)
             pygame.draw.rect(self.screen, horse.color, badge, border_radius=3)
-            num_s = self.f_sm.render(str(horse.number), True, COL_WHITE)
-            self.screen.blit(num_s, (badge.x + badge.w // 2 - num_s.get_width() // 2,
-                                     badge.y + 1))
-            cx += 30
+            ns = self.f_xs.render(str(horse.number), True, COL_WHITE)
+            self.screen.blit(ns, (badge.centerx - ns.get_width() // 2, badge.y + 1))
 
-            # 馬名（最大9文字）
-            self.screen.blit(self.f_sm.render(horse.name, True, COL_TEXT), (cx, ly + 1))
-            cx += 85
+            # 馬名（9文字まで、f_xs で確実に収まる）
+            self.screen.blit(
+                self.f_xs.render(horse.name, True, COL_TEXT), (TX_NAME, row_y))
 
-            # 強さ（星表示）
-            star_col = COL_GOLD if horse.strength >= 4 else \
-                       COL_DIM  if horse.strength <= 2 else COL_YELLOW
-            self.screen.blit(self.f_sm.render(horse.stars, True, star_col), (cx, ly + 1))
-            cx += 80
+            # 強さ★（色分け）
+            star_col = COL_GOLD if horse.strength >= 4 \
+                       else COL_DIM if horse.strength <= 2 else COL_YELLOW
+            self.screen.blit(
+                self.f_xs.render(horse.stars, True, star_col), (TX_STARS, row_y))
 
-            # 脚質略称
+            # 脚質略称（色分け）
             style_col = {
                 "逃げ": COL_RED, "先行": COL_ORANGE,
                 "差し": COL_GREEN_BR, "追い込み": COL_SILVER,
             }.get(horse.running_style, COL_TEXT)
             self.screen.blit(
-                self.f_sm.render(horse.style_short, True, style_col), (cx, ly + 1)
-            )
-            cx += 30
+                self.f_xs.render(horse.style_short, True, style_col), (TX_STYLE, row_y))
 
             # オッズ
             if odds:
                 odds_col = COL_GREEN_BR if odds >= 5.0 else COL_YELLOW
                 self.screen.blit(
-                    self.f_sm.render(f"{odds:.1f}倍", True, odds_col), (cx, ly + 1)
-                )
+                    self.f_xs.render(f"{odds:.1f}倍", True, odds_col), (TX_ODDS, row_y))
             else:
-                self.screen.blit(self.f_sm.render("---", True, COL_DIM), (cx, ly + 1))
-            cx += 80
+                self.screen.blit(
+                    self.f_xs.render("---", True, COL_DIM), (TX_ODDS, row_y))
 
             # 売上
             self.screen.blit(
-                self.f_sm.render(f"{pool:,}円", True, COL_DIM), (cx, ly + 1)
-            )
-            ly += 24
+                self.f_xs.render(f"{pool:,}円", True, COL_DIM), (TX_POOL, row_y))
 
-        ly += 8
-        pygame.draw.line(self.screen, COL_BORDER, (lx, ly), (lx + 420, ly), 1)
-        ly += 8
+            ly += 22
+
+        ly += 6
+        pygame.draw.line(self.screen, COL_BORDER, (lx, ly), (lx + 450, ly), 1)
+        ly += 6
 
         # 馬連オッズ（購入済み組み合わせのみ）
         quinella_odds = self.betting_manager.get_quinella_odds()
@@ -685,34 +730,32 @@ class Game:
                 stop_x = max(screen_x, finish_sx + 60)
                 draw_horse(self.screen, horse, stop_x, lane_center_y, self.f_num)
 
-        # ── 右下: ゴール順情報パネル
-        panel_w, panel_h = 200, NUM_HORSES * 22 + 30
+        # ── 右下: ゴール順情報パネル（幅を広げて9文字馬名を収容）
+        panel_w, panel_h = 240, NUM_HORSES * 22 + 30
         panel_rect = pygame.Rect(SCREEN_W - panel_w - 8,
                                  SCREEN_H - panel_h - 8,
                                  panel_w, panel_h)
         _draw_panel(self.screen, panel_rect, bg=(10, 20, 10, 200))
-        _draw_text_shadow(self.screen, "馬番  馬名", self.f_sm, COL_DIM,
-                          panel_rect.x + 8, panel_rect.y + 6)
+        _draw_text_shadow(self.screen, "馬番  馬名         着順", self.f_xs, COL_DIM,
+                          panel_rect.x + 6, panel_rect.y + 6)
         for i, horse in enumerate(self.horses):
-            py = panel_rect.y + 26 + i * 22
+            py = panel_rect.y + 24 + i * 22
             # 馬番バッジ
-            b = pygame.Rect(panel_rect.x + 6, py + 1, 16, 16)
+            b = pygame.Rect(panel_rect.x + 4, py + 1, 16, 16)
             pygame.draw.rect(self.screen, horse.color, b, border_radius=2)
-            self.screen.blit(
-                self.f_sm.render(str(horse.number), True, COL_WHITE),
-                (b.x + b.w // 2 - 5, b.y + 1)
-            )
-            # 馬名（6文字まで）
+            ns = self.f_xs.render(str(horse.number), True, COL_WHITE)
+            self.screen.blit(ns, (b.centerx - ns.get_width() // 2, b.y + 1))
+            # 馬名（9文字フル表示・f_num_smで確実に収まる）
             name_col = COL_GOLD if horse.finish_rank == 1 else COL_TEXT
             self.screen.blit(
-                self.f_sm.render(horse.name[:6], True, name_col),
-                (panel_rect.x + 28, py + 1)
+                self.f_num_sm.render(horse.name, True, name_col),
+                (panel_rect.x + 24, py + 1)
             )
             # 着順
             if horse.finish_rank:
                 self.screen.blit(
-                    self.f_sm.render(f"{horse.finish_rank}着", True, COL_YELLOW),
-                    (panel_rect.x + 155, py + 1)
+                    self.f_xs.render(f"{horse.finish_rank}着", True, COL_YELLOW),
+                    (panel_rect.x + 195, py + 1)
                 )
 
 
@@ -750,8 +793,8 @@ class Game:
             self.screen.blit(bn, (badge.x + badge.w // 2 - bn.get_width() // 2,
                                   badge.y + 4))
 
-            # 馬名
-            name_surf = self.f_lg.render(horse.name[:8], True, col)
+            # 馬名（9文字フル表示）
+            name_surf = self.f_lg.render(horse.name, True, col)
             self.screen.blit(name_surf, (order_rect.x + 115, fy))
 
             # 上位3頭以下は小さく

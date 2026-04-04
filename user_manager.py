@@ -150,6 +150,8 @@ class UserManager:
         """
         残高ランキングを返す。
 
+        channel_id が 'BOT_' で始まるダミーユーザーはランキングに含めない。
+
         Returns:
             [(display_name, balance), ...] の降順リスト
         """
@@ -157,7 +159,9 @@ class UserManager:
             conn = self._connect()
             try:
                 cursor = conn.execute(
-                    "SELECT display_name, balance FROM users ORDER BY balance DESC LIMIT ?",
+                    "SELECT display_name, balance FROM users "
+                    "WHERE channel_id NOT LIKE 'BOT_%' "
+                    "ORDER BY balance DESC LIMIT ?",
                     (limit,)
                 )
                 return cursor.fetchall()
