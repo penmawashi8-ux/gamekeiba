@@ -169,7 +169,7 @@ class YouTubeClient:
     コマンドを command_queue に投入する。
     """
 
-    POLL_INTERVAL = 5.0   # ポーリング間隔（秒）
+    POLL_INTERVAL = 3.0   # ポーリング間隔（秒）
 
     def __init__(self, video_id: str, api_key: str,
                  command_queue: queue.Queue):
@@ -250,31 +250,35 @@ class YouTubeClient:
             if self._next_page_token:
                 params["pageToken"] = self._next_page_token
 
-            logger.debug("チャットAPIポーリング開始: live_chat_id=%s pageToken=%s",
+            logger.debug("[ポーリング実行中] live_chat_id=%s pageToken=%s",
                          self._live_chat_id, self._next_page_token)
             resp = self._youtube.liveChatMessages().list(**params).execute()
             self._next_page_token = resp.get("nextPageToken")
 
             items = resp.get("items", [])
-            logger.debug("コメント取得完了: %d件", len(items))
+            logger.debug("[コメント取得] %d件", len(items))
 
             for item in items:
                 snippet = item.get("snippet", {})
-                author = item.get("authorDetails", {})
-                text = snippet.get("displayMessage", "")
-                channel_id = author.get("channelId", "")
+                author  = item.get("authorDetails", {})
+                text         = snippet.get("displayMessage", "")
+                channel_id   = author.get("channelId", "")
                 display_name = author.get("displayName", "名無し")
+
+                logger.debug("[コメント内容] user=%s channel=%s text=%r",
+                             display_name, channel_id, text)
 
                 cmd = parse_comment(channel_id, display_name, text, time.time())
                 if cmd:
                     self.command_queue.put(cmd)
-                    logger.info("コマンド認識: user=%s type=%s text=%r",
+                    logger.info("[コマンド認識] user=%s type=%s text=%r",
                                 display_name, cmd.command_type, text)
 
         except HttpError as e:
-            logger.warning("YouTube API エラー: %s", e)
+            logger.error("[APIエラー] HttpError: status=%s reason=%s",
+                         e.resp.status if hasattr(e, "resp") else "?", e)
         except Exception as e:
-            logger.warning("メッセージ取得エラー: %s", e)
+            logger.error("[APIエラー] %s: %s", type(e).__name__, e)
 
     def _poll_loop(self):
         """ポーリングループ（バックグラウンドスレッドで実行）"""
