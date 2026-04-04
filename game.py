@@ -622,11 +622,12 @@ class Game:
             self.screen.blit(
                 self.f_xs.render(horse.style_short, True, style_col), (TX_STYLE, row_y))
 
-            # オッズ
+            # オッズ（表示は最低1.0倍）
             if odds:
-                odds_col = COL_GREEN_BR if odds >= 5.0 else COL_YELLOW
+                disp_odds = max(1.0, odds)
+                odds_col = COL_GREEN_BR if disp_odds >= 5.0 else COL_YELLOW
                 self.screen.blit(
-                    self.f_xs.render(f"{odds:.1f}倍", True, odds_col), (TX_ODDS, row_y))
+                    self.f_xs.render(f"{disp_odds:.1f}倍", True, odds_col), (TX_ODDS, row_y))
             else:
                 self.screen.blit(
                     self.f_xs.render("---", True, COL_DIM), (TX_ODDS, row_y))
@@ -648,8 +649,9 @@ class Game:
             ly += 28
             for (h1, h2), odds in sorted(quinella_odds.items()):
                 pool = self.betting_manager._quinella_pool.get((h1, h2), 0)
-                line = f"  {h1}-{h2}番:  {odds:.1f}倍  ({pool:,}円)"
-                col = COL_GREEN_BR if odds >= 5.0 else COL_YELLOW
+                disp_odds = max(1.0, odds)
+                line = f"  {h1}-{h2}番:  {disp_odds:.1f}倍  ({pool:,}円)"
+                col = COL_GREEN_BR if disp_odds >= 5.0 else COL_YELLOW
                 self.screen.blit(self.f_sm.render(line, True, col), (lx, ly))
                 ly += 22
                 if ly > SCREEN_H - 20:
@@ -876,7 +878,7 @@ class Game:
 
         # 単勝
         w_odds = win_odds_map.get(first_num)
-        w_str  = f"{w_odds:.1f}倍" if w_odds else "---"
+        w_str  = f"{max(1.0, w_odds):.1f}倍" if w_odds else "---"
         self.screen.blit(
             self.f_md.render(f"単勝  {first_num}番  {w_str}", True, COL_TEXT),
             (dx, dy)
@@ -887,7 +889,7 @@ class Game:
         from betting import BettingManager
         qkey = (min(first_num, second_num), max(first_num, second_num))
         q_odds = quin_odds_map.get(qkey)
-        q_str  = f"{q_odds:.1f}倍" if q_odds else "---"
+        q_str  = f"{max(1.0, q_odds):.1f}倍" if q_odds else "---"
         self.screen.blit(
             self.f_md.render(
                 f"馬連  {qkey[0]}-{qkey[1]}番  {q_str}", True, COL_TEXT
