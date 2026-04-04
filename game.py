@@ -20,7 +20,8 @@ from typing import List, Optional, Tuple
 
 import pygame
 
-from horse import Horse, draw_horse, generate_race_horses, TRACK_LENGTH, HORSE_COLORS
+from horse import (Horse, draw_horse, generate_race_horses,
+                   TRACK_LENGTH, HORSE_COLORS, horse_num_text_color)
 from betting import BettingManager, PayoutResult
 from user_manager import UserManager
 from youtube_client import ParsedCommand, CMD_WIN, CMD_QUINELLA, CMD_BALANCE, CMD_ERROR
@@ -140,6 +141,30 @@ def _draw_panel(surface: pygame.Surface, rect: pygame.Rect,
     pygame.draw.rect(surface, border, rect, 1, border_radius=radius)
 
 
+def _fit_text(text: str, color: tuple, max_width: int,
+              fonts: list) -> pygame.Surface:
+    """
+    テキストを指定幅に収まるよう描画する。
+
+    fonts は大→小の順で渡す。全て収まらない場合は最小フォントで強制描画。
+
+    Args:
+        text:      描画するテキスト
+        color:     文字色
+        max_width: 許容最大幅（px）
+        fonts:     試行するフォントのリスト（大きい順）
+
+    Returns:
+        描画済み pygame.Surface
+    """
+    for font in fonts:
+        surf = font.render(text, True, color)
+        if surf.get_width() <= max_width:
+            return surf
+    # 最小フォントで強制描画
+    return fonts[-1].render(text, True, color)
+
+
 # ──────────────────────────────────────────────────────────────────
 # Game クラス
 # ──────────────────────────────────────────────────────────────────
@@ -185,6 +210,8 @@ class Game:
         else:
             logger.warning("日本語フォントが見つかりません（英語表示になります）")
         self.f_xs  = _load_font(font_path, 15)  # 小テーブル用
+        self.f_xs2 = _load_font(font_path, 13)  # 馬名縮小フォント1
+        self.f_xs3 = _load_font(font_path, 11)  # 馬名縮小フォント2
         self.f_sm  = _load_font(font_path, 18)
         self.f_md  = _load_font(font_path, 24)
         self.f_lg  = _load_font(font_path, 32)
@@ -566,15 +593,20 @@ class Game:
             pool = self.betting_manager._win_pool.get(horse.number, 0)
             row_y = ly + 1
 
-            # 馬番カラーバッジ
+            # 馬番カラーバッジ（枠色に応じた文字色）
             badge = pygame.Rect(TX_NUM, row_y, 20, 18)
             pygame.draw.rect(self.screen, horse.color, badge, border_radius=3)
-            ns = self.f_xs.render(str(horse.number), True, COL_WHITE)
+            ns = self.f_xs.render(str(horse.number), True,
+                                  horse_num_text_color(horse.number))
             self.screen.blit(ns, (badge.centerx - ns.get_width() // 2, badge.y + 1))
 
-            # 馬名（9文字まで、f_xs で確実に収まる）
+            # 馬名（幅に収まるよう動的にフォントを縮小）
+            name_w = TX_STARS - TX_NAME - 4
             self.screen.blit(
-                self.f_xs.render(horse.name, True, COL_TEXT), (TX_NAME, row_y))
+                _fit_text(horse.name, COL_TEXT, name_w,
+                          [self.f_xs, self.f_xs2, self.f_xs3]),
+                (TX_NAME, row_y)
+            )
 
             # 強さ★（色分け）
             star_col = COL_GOLD if horse.strength >= 4 \
@@ -740,15 +772,18 @@ class Game:
                           panel_rect.x + 6, panel_rect.y + 6)
         for i, horse in enumerate(self.horses):
             py = panel_rect.y + 24 + i * 22
-            # 馬番バッジ
+            # 馬番バッジ（枠色に応じた文字色）
             b = pygame.Rect(panel_rect.x + 4, py + 1, 16, 16)
             pygame.draw.rect(self.screen, horse.color, b, border_radius=2)
-            ns = self.f_xs.render(str(horse.number), True, COL_WHITE)
+            ns = self.f_xs.render(str(horse.number), True,
+                                  horse_num_text_color(horse.number))
             self.screen.blit(ns, (b.centerx - ns.get_width() // 2, b.y + 1))
-            # 馬名（9文字フル表示・f_num_smで確実に収まる）
+            # 馬名（幅に収まるよう動的にフォントを縮小）
             name_col = COL_GOLD if horse.finish_rank == 1 else COL_TEXT
+            name_max_w = panel_rect.x + 195 - (panel_rect.x + 24) - 4
             self.screen.blit(
-                self.f_num_sm.render(horse.name, True, name_col),
+                _fit_text(horse.name, name_col, name_max_w,
+                          [self.f_num_sm, self.f_xs, self.f_xs2, self.f_xs3]),
                 (panel_rect.x + 24, py + 1)
             )
             # 着順
@@ -786,15 +821,19 @@ class Game:
             rank_s = self.f_lg.render(f"{i+1}着", True, col)
             self.screen.blit(rank_s, (order_rect.x + 10, fy))
 
-            # 馬番バッジ
+            # 馬番バッジ（枠色に応じた文字色）
             badge = pygame.Rect(order_rect.x + 80, fy + 3, 24, 24)
             pygame.draw.rect(self.screen, horse.color, badge, border_radius=4)
-            bn = self.f_sm.render(str(horse.number), True, COL_WHITE)
+            bn = self.f_sm.render(str(horse.number), True,
+                                  horse_num_text_color(horse.number))
             self.screen.blit(bn, (badge.x + badge.w // 2 - bn.get_width() // 2,
                                   badge.y + 4))
 
-            # 馬名（9文字フル表示）
-            name_surf = self.f_lg.render(horse.name, True, col)
+            # 馬名（幅に収まるよう動的にフォントを縮小）
+            name_max_w = order_rect.x + order_rect.width - (order_rect.x + 115) - 8
+            name_surf = _fit_text(horse.name, col, name_max_w,
+                                  [self.f_lg, self.f_md, self.f_sm,
+                                   self.f_xs, self.f_xs2, self.f_xs3])
             self.screen.blit(name_surf, (order_rect.x + 115, fy))
 
             # 上位3頭以下は小さく

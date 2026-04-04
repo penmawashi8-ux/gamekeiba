@@ -30,17 +30,34 @@ HORSE_NAMES: List[str] = [
 assert all(len(n) <= 9 for n in HORSE_NAMES), \
     "HORSE_NAMES に9文字超の馬名が含まれています"
 
-# 馬番ごとの枠色（日本の枠番カラーに準拠）
+# 馬番ごとの枠色（JRA公式枠番カラー）
 HORSE_COLORS: List[tuple] = [
-    (220,  50,  50),   # 1番: 白（視認性のため赤表示）
-    (50,  100, 220),   # 2番: 黒（青表示）
-    (220, 80,  80),    # 3番: 赤
-    (50,  180,  50),   # 4番: 青（緑表示）
-    (220, 220,  50),   # 5番: 黄
-    (50,  190, 200),   # 6番: 緑（水色表示）
-    (220, 120,  40),   # 7番: オレンジ
-    (200,  70, 200),   # 8番: ピンク（紫表示）
+    (255, 255, 255),  # 1番: 白
+    (  0,   0,   0),  # 2番: 黒
+    (220,   0,   0),  # 3番: 赤
+    (  0, 100, 220),  # 4番: 青
+    (255, 200,   0),  # 5番: 黄
+    (  0, 160,   0),  # 6番: 緑
+    (255, 120,   0),  # 7番: 橙
+    (255, 105, 180),  # 8番: ピンク
 ]
+
+# 馬番バッジの文字色（背景が白・黄は黒文字、それ以外は白文字）
+HORSE_TEXT_COLORS: List[tuple] = [
+    (  0,   0,   0),  # 1番（白背景）: 黒
+    (255, 255, 255),  # 2番（黒背景）: 白
+    (255, 255, 255),  # 3番（赤背景）: 白
+    (255, 255, 255),  # 4番（青背景）: 白
+    (  0,   0,   0),  # 5番（黄背景）: 黒
+    (255, 255, 255),  # 6番（緑背景）: 白
+    (255, 255, 255),  # 7番（橙背景）: 白
+    (255, 255, 255),  # 8番（ピンク背景）: 白
+]
+
+
+def horse_num_text_color(number: int) -> tuple:
+    """馬番バッジの文字色を返す（背景が白・黄の場合は黒、それ以外は白）"""
+    return HORSE_TEXT_COLORS[number - 1]
 
 # ──────────────────────────────────────────────────────────────────
 # レース設定定数
@@ -213,7 +230,15 @@ def draw_horse(
     sx = int(screen_x)
     sy = int(screen_y)
     col = horse.color
-    dark = tuple(max(0, c - 70) for c in col)
+
+    # アウトライン色: 白・黄系は濃いグレー、黒系は中グレー、それ以外は暗色
+    brightness = sum(col) // 3
+    if brightness > 200:
+        dark = (80, 80, 80)       # 白・黄系
+    elif brightness < 60:
+        dark = (110, 110, 110)    # 黒系
+    else:
+        dark = tuple(max(0, c - 70) for c in col)
 
     t = horse._anim_t
     # 脚アニメーション: 前後で位相をπずらす
@@ -236,8 +261,9 @@ def draw_horse(
     # 頭部（円）
     pygame.draw.circle(surface, col, (sx + 47, sy - 20), 10)
     pygame.draw.circle(surface, dark, (sx + 47, sy - 20), 10, 1)
-    # 目
-    pygame.draw.circle(surface, (20, 20, 20), (sx + 52, sy - 23), 2)
+    # 目（黒馬は白目、それ以外は黒目）
+    eye_col = (200, 200, 200) if brightness < 60 else (20, 20, 20)
+    pygame.draw.circle(surface, eye_col, (sx + 52, sy - 23), 2)
 
     # ── 尻尾
     tail_base_y = sy - 8
@@ -259,8 +285,9 @@ def draw_horse(
     pygame.draw.line(surface, (90, 55, 20),
                      (sx - 22, sy + 11), (sx - 26 + leg_fwd, sy + 28), 3)
 
-    # ── 馬番（胴体上に白文字）
-    num_surf = font_num.render(str(horse.number), True, (255, 255, 255))
+    # ── 馬番（枠色に応じたコントラスト文字色）
+    num_surf = font_num.render(str(horse.number), True,
+                               horse_num_text_color(horse.number))
     surface.blit(num_surf, (sx - num_surf.get_width() // 2 - 5,
                             sy - num_surf.get_height() // 2))
 
