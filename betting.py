@@ -198,17 +198,17 @@ class BettingManager:
                 label = ""
 
                 if bet.bet_type == "win" and bet.horse1 == first:
-                    # 単勝的中
+                    # 単勝的中（10円単位切り捨て）
                     odds = win_odds.get(first, 0.0)
-                    payout = int(bet.amount * odds)
+                    payout = (int(bet.amount * odds) // 10) * 10
                     label = str(first)
 
                 elif bet.bet_type == "quinella":
                     key = self._quinella_key(bet.horse1, bet.horse2)
                     if key == quinella_key:
-                        # 馬連的中
+                        # 馬連的中（10円単位切り捨て）
                         odds = quinella_odds.get(quinella_key, 0.0)
-                        payout = int(bet.amount * odds)
+                        payout = (int(bet.amount * odds) // 10) * 10
                         label = f"{key[0]}-{key[1]}"
 
                 if payout > 0:

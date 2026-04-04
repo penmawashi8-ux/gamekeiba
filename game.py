@@ -23,7 +23,7 @@ import pygame
 from horse import Horse, draw_horse, generate_race_horses, TRACK_LENGTH, HORSE_COLORS
 from betting import BettingManager, PayoutResult
 from user_manager import UserManager
-from youtube_client import ParsedCommand, CMD_WIN, CMD_QUINELLA, CMD_BALANCE
+from youtube_client import ParsedCommand, CMD_WIN, CMD_QUINELLA, CMD_BALANCE, CMD_ERROR
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ TRACK_TOP   = HEADER_H
 LANE_H      = (SCREEN_H - TRACK_TOP) // 8   # 1レーン高さ ≈ 83px
 NUM_HORSES  = 8
 
-BETTING_DURATION = 300   # 馬券受付秒数
+BETTING_DURATION = 90    # 馬券受付秒数
 RESULTS_DURATION = 15    # 結果表示秒数
 
 # ──────────────────────────────────────────────────────────────────
@@ -264,7 +264,12 @@ class Game:
                 cmd.channel_id, cmd.display_name
             )
 
-            if cmd.command_type == CMD_BALANCE:
+            if cmd.command_type == CMD_ERROR:
+                # 100円単位エラー等: ユーザー登録だけして画面にエラー表示
+                self._add_message(f"[エラー] {cmd.display_name}: {cmd.error_message}")
+                continue
+
+            elif cmd.command_type == CMD_BALANCE:
                 bal = user["balance"]
                 self._add_message(f"{cmd.display_name}: 残高 {bal:,}円")
 
@@ -490,15 +495,18 @@ class Game:
 
         win_odds = self.betting_manager.get_win_odds()
 
-        # テーブルヘッダー
-        header_cols = [("馬番", 50), ("馬名", 180), ("オッズ", 90), ("売上", 80)]
+        # テーブルヘッダー（馬番 / 馬名 / 強さ / 脚質 / オッズ / 売上）
+        #   lx+0  lx+30  lx+115  lx+195  lx+225  lx+305  lx+385
+        COL_HEADER_LABELS = [
+            ("馬番", 30), ("馬名", 85), ("強さ", 80),
+            ("脚", 30), ("オッズ", 80), ("売上", 80),
+        ]
         hx = lx + 5
-        for label, w in header_cols:
-            surf = self.f_sm.render(label, True, COL_DIM)
-            self.screen.blit(surf, (hx, ly))
+        for label, w in COL_HEADER_LABELS:
+            self.screen.blit(self.f_sm.render(label, True, COL_DIM), (hx, ly))
             hx += w
         ly += 22
-        pygame.draw.line(self.screen, COL_BORDER, (lx, ly), (lx + 420, ly), 1)
+        pygame.draw.line(self.screen, COL_BORDER, (lx, ly), (lx + 430, ly), 1)
         ly += 4
 
         win_pool = self.betting_manager.get_win_pool_total()
@@ -506,35 +514,49 @@ class Game:
             odds = win_odds.get(horse.number)
             pool = self.betting_manager._win_pool.get(horse.number, 0)
 
+            cx = lx + 5   # 各列の描画 X 起点
+
             # 馬番色バッジ
-            badge = pygame.Rect(lx + 5, ly + 1, 18, 18)
+            badge = pygame.Rect(cx, ly + 1, 18, 18)
             pygame.draw.rect(self.screen, horse.color, badge, border_radius=3)
             num_s = self.f_sm.render(str(horse.number), True, COL_WHITE)
             self.screen.blit(num_s, (badge.x + badge.w // 2 - num_s.get_width() // 2,
                                      badge.y + 1))
+            cx += 30
 
-            # 馬名（最大8文字）
-            name_disp = horse.name[:8]
-            self.screen.blit(self.f_sm.render(name_disp, True, COL_TEXT),
-                             (lx + 55, ly + 1))
+            # 馬名（最大9文字）
+            self.screen.blit(self.f_sm.render(horse.name, True, COL_TEXT), (cx, ly + 1))
+            cx += 85
+
+            # 強さ（星表示）
+            star_col = COL_GOLD if horse.strength >= 4 else \
+                       COL_DIM  if horse.strength <= 2 else COL_YELLOW
+            self.screen.blit(self.f_sm.render(horse.stars, True, star_col), (cx, ly + 1))
+            cx += 80
+
+            # 脚質略称
+            style_col = {
+                "逃げ": COL_RED, "先行": COL_ORANGE,
+                "差し": COL_GREEN_BR, "追い込み": COL_SILVER,
+            }.get(horse.running_style, COL_TEXT)
+            self.screen.blit(
+                self.f_sm.render(horse.style_short, True, style_col), (cx, ly + 1)
+            )
+            cx += 30
 
             # オッズ
             if odds:
                 odds_col = COL_GREEN_BR if odds >= 5.0 else COL_YELLOW
                 self.screen.blit(
-                    self.f_sm.render(f"{odds:.1f}倍", True, odds_col),
-                    (lx + 235, ly + 1)
+                    self.f_sm.render(f"{odds:.1f}倍", True, odds_col), (cx, ly + 1)
                 )
             else:
-                self.screen.blit(
-                    self.f_sm.render("---", True, COL_DIM),
-                    (lx + 235, ly + 1)
-                )
+                self.screen.blit(self.f_sm.render("---", True, COL_DIM), (cx, ly + 1))
+            cx += 80
 
             # 売上
             self.screen.blit(
-                self.f_sm.render(f"{pool:,}円", True, COL_DIM),
-                (lx + 325, ly + 1)
+                self.f_sm.render(f"{pool:,}円", True, COL_DIM), (cx, ly + 1)
             )
             ly += 24
 

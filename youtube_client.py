@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 CMD_WIN = "win_bet"
 CMD_QUINELLA = "quinella_bet"
 CMD_BALANCE = "balance"
+CMD_ERROR = "error"   # 購入金額が100円単位でない等のバリデーションエラー
 
 
 @dataclass
@@ -37,12 +38,13 @@ class ParsedCommand:
     """パースされたコメントコマンド"""
     channel_id: str
     display_name: str
-    command_type: str         # CMD_WIN | CMD_QUINELLA | CMD_BALANCE
+    command_type: str         # CMD_WIN | CMD_QUINELLA | CMD_BALANCE | CMD_ERROR
     horse1: Optional[int] = None
     horse2: Optional[int] = None
     amount: Optional[int] = None
     raw_text: str = ""
     timestamp: float = 0.0
+    error_message: str = ""   # CMD_ERROR 時のエラーメッセージ
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -75,6 +77,21 @@ def parse_comment(channel_id: str, display_name: str,
                 horse = int(parts[1])
                 amount = int(parts[2])
                 if 1 <= horse <= 8 and amount > 0:
+                    # 100円単位チェック
+                    if amount % 100 != 0:
+                        return ParsedCommand(
+                            channel_id=channel_id,
+                            display_name=display_name,
+                            command_type=CMD_ERROR,
+                            horse1=horse,
+                            amount=amount,
+                            raw_text=text,
+                            timestamp=timestamp,
+                            error_message=(
+                                f"金額は100円単位で入力してください "
+                                f"（例: !単勝 {horse} {(amount // 100 + 1) * 100}）"
+                            ),
+                        )
                     return ParsedCommand(
                         channel_id=channel_id,
                         display_name=display_name,
@@ -97,6 +114,22 @@ def parse_comment(channel_id: str, display_name: str,
                 h2 = int(parts[2])
                 amount = int(parts[3])
                 if 1 <= h1 <= 8 and 1 <= h2 <= 8 and h1 != h2 and amount > 0:
+                    # 100円単位チェック
+                    if amount % 100 != 0:
+                        return ParsedCommand(
+                            channel_id=channel_id,
+                            display_name=display_name,
+                            command_type=CMD_ERROR,
+                            horse1=h1,
+                            horse2=h2,
+                            amount=amount,
+                            raw_text=text,
+                            timestamp=timestamp,
+                            error_message=(
+                                f"金額は100円単位で入力してください "
+                                f"（例: !馬連 {h1} {h2} {(amount // 100 + 1) * 100}）"
+                            ),
+                        )
                     return ParsedCommand(
                         channel_id=channel_id,
                         display_name=display_name,

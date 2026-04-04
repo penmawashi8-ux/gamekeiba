@@ -14,15 +14,21 @@ from typing import List, Optional
 # 馬名・カラー定数
 # ──────────────────────────────────────────────────────────────────
 
+# 全て9文字以内（日本語1文字 = 1カウント）
 HORSE_NAMES: List[str] = [
-    "ディープインパクト", "オルフェーヴル", "ウオッカ", "ジェンティルドンナ",
-    "キタサンブラック", "アーモンドアイ", "コントレイル", "エフフォーリア",
-    "イクイノックス", "テイエムオペラオー", "スペシャルウィーク", "グラスワンダー",
-    "サイレンススズカ", "ナリタブライアン", "トウカイテイオー", "オグリキャップ",
-    "シンボリルドルフ", "ミスターシービー", "タマモクロス", "メジロマックイーン",
-    "ライスシャワー", "ビワハヤヒデ", "マヤノトップガン", "バブルガムフェロー",
-    "エルコンドルパサー", "アグネスデジタル", "ジャングルポケット", "ゼンノロブロイ",
+    "ディープ",       "オルフェール",   "ウオッカ",       "ジェンティル",
+    "キタサンブラック", "アーモンドアイ", "コントレイル",   "エフフォーリア",
+    "イクイノックス", "テイエムオペラ", "スペシャルW",    "グラスワンダー",
+    "サイレンス",     "ナリタブライアン", "トウカイテイオー", "オグリキャップ",
+    "シンボリルドルフ", "ミスターシービー", "タマモクロス",  "メジロマックイーン",
+    "ライスシャワー", "ビワハヤヒデ",   "マヤノトップガン", "バブルガムF",
+    "エルコンドル",   "アグネスデジタル", "ジャングルP",    "ゼンノロブロイ",
+    "ハルウララ",     "ヒシアマゾン",   "メイショウドト", "タニノギムレット",
 ]
+
+# 全馬名が9文字以内であることを起動時に保証
+assert all(len(n) <= 9 for n in HORSE_NAMES), \
+    "HORSE_NAMES に9文字超の馬名が含まれています"
 
 # 馬番ごとの枠色（日本の枠番カラーに準拠）
 HORSE_COLORS: List[tuple] = [
@@ -41,8 +47,21 @@ HORSE_COLORS: List[tuple] = [
 # ──────────────────────────────────────────────────────────────────
 
 TRACK_LENGTH: int = 6000   # トラック全長（ピクセル単位）
-BASE_SPEED_MIN: float = 175.0   # 最低基本速度（px/秒）
-BASE_SPEED_MAX: float = 225.0   # 最高基本速度（px/秒）
+BASE_SPEED_MIN: float = 185.0   # 基本速度の下限（強さ・脚質で上下に変動）
+BASE_SPEED_MAX: float = 210.0   # 基本速度の上限
+
+# 脚質リスト
+RUNNING_STYLES: List[str] = ["逃げ", "先行", "差し", "追い込み"]
+# 画面表示用略称
+STYLE_SHORT: dict = {"逃げ": "逃", "先行": "先", "差し": "差", "追い込み": "追"}
+
+# 強さ → 速度倍率
+STRENGTH_MULT: dict = {1: 0.88, 2: 0.94, 3: 1.00, 4: 1.06, 5: 1.12}
+# 強さ → 星表示（★☆）
+STRENGTH_STARS: dict = {
+    1: "★☆☆☆☆", 2: "★★☆☆☆", 3: "★★★☆☆",
+    4: "★★★★☆", 5: "★★★★★",
+}
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -52,29 +71,87 @@ BASE_SPEED_MAX: float = 225.0   # 最高基本速度（px/秒）
 class Horse:
     """競走馬クラス"""
 
-    def __init__(self, number: int, name: str):
+    def __init__(self, number: int, name: str,
+                 strength: int = 3, running_style: str = "先行"):
         """
         Args:
-            number: 馬番（1〜8）
-            name:   馬名
+            number:        馬番（1〜8）
+            name:          馬名（9文字以内）
+            strength:      強さ（1〜5）
+            running_style: 脚質（"逃げ"/"先行"/"差し"/"追い込み"）
         """
         self.number: int = number
-        self.name: str = name
+        self.name: str = name[:9]   # 安全のため上限適用
         self.color: tuple = HORSE_COLORS[number - 1]
+        self.strength: int = strength
+        self.running_style: str = running_style
 
         # レース中の状態（setup_race() で初期化）
-        self.x: float = 0.0          # 現在トラック位置（px）
-        self.speed: float = 0.0      # 現在速度（px/秒）
-        self.base_speed: float = 0.0 # 基本速度（レース中は固定）
-        self.finished: bool = False  # ゴール済み
+        self.x: float = 0.0
+        self.speed: float = 0.0
+        self.base_speed: float = 0.0
+        self.finished: bool = False
         self.finish_rank: Optional[int] = None
         self.finish_time: Optional[float] = None
 
         # アニメーション用タイマー
         self._anim_t: float = 0.0
 
+    # ── 表示用プロパティ ──────────────────────────
+    @property
+    def stars(self) -> str:
+        """強さを星表示で返す（例: ★★★☆☆）"""
+        return STRENGTH_STARS[self.strength]
+
+    @property
+    def style_short(self) -> str:
+        """脚質の略称を返す（例: 逃、先、差、追）"""
+        return STYLE_SHORT.get(self.running_style, "?")
+
+    # ── 速度計算 ──────────────────────────────────
+
+    def _style_mult(self) -> float:
+        """
+        脚質と現在進行度に応じた速度倍率を返す。
+
+        レース全体を progress=0.0（スタート）〜1.0（ゴール）で表し、
+        脚質ごとに前半・後半の速度プロファイルを変える。
+        """
+        progress = min(1.0, self.x / TRACK_LENGTH)
+        s = self.running_style
+
+        if s == "逃げ":
+            # 前半強く、後半急失速
+            if progress < 0.3:
+                return 1.30
+            elif progress < 0.65:
+                return 1.30 - (progress - 0.3) * 0.65   # 1.30→1.07
+            else:
+                return max(0.78, 1.07 - (progress - 0.65) * 0.83)  # 1.07→0.78
+
+        elif s == "先行":
+            # 前半やや速く、後半ゆるやか失速
+            if progress < 0.5:
+                return 1.12
+            else:
+                return max(0.92, 1.12 - (progress - 0.5) * 0.40)
+
+        elif s == "差し":
+            # 前半抑えて直線で加速
+            if progress < 0.55:
+                return 0.93
+            else:
+                return 0.93 + (progress - 0.55) * 0.70   # 最大1.24
+
+        else:  # 追い込み
+            # 後半3割だけ猛加速
+            if progress < 0.65:
+                return 0.82
+            else:
+                return 0.82 + (progress - 0.65) * 1.80   # 最大1.47
+
     def setup_race(self):
-        """レース開始時に速度・位置をリセットしランダム速度を設定する"""
+        """レース開始時に速度・位置をリセットする"""
         self.base_speed = random.uniform(BASE_SPEED_MIN, BASE_SPEED_MAX)
         self.speed = self.base_speed
         self.x = 0.0
@@ -87,7 +164,8 @@ class Horse:
         """
         馬の位置を更新する。
 
-        わずかなランダム変動を加えることでレース展開に動きを出す。
+        強さ・脚質・ランダムノイズを組み合わせて速度を計算する。
+        完全実力通りにはならないよう適度なランダム性を保持。
 
         Args:
             dt: デルタタイム（秒）
@@ -95,12 +173,16 @@ class Horse:
         if self.finished:
             return
 
-        # 速度変動（白色雑音）
-        noise = random.gauss(0, 4.0)
-        self.speed = max(
-            BASE_SPEED_MIN * 0.85,
-            min(BASE_SPEED_MAX * 1.15, self.base_speed + noise),
-        )
+        strength_mult = STRENGTH_MULT[self.strength]
+        style_mult    = self._style_mult()
+
+        # ランダムノイズ（標準偏差=3px/s 程度の揺らぎ）
+        noise = random.gauss(0, 3.0)
+
+        effective = self.base_speed * strength_mult * style_mult + noise
+        # 下限・上限クランプ（速すぎ・遅すぎ防止）
+        self.speed = max(BASE_SPEED_MIN * 0.55,
+                         min(BASE_SPEED_MAX * 1.50, effective))
         self.x += self.speed * dt
         self._anim_t += dt
 
@@ -191,6 +273,9 @@ def generate_race_horses(count: int = 8) -> List[Horse]:
     """
     レース用の馬をランダム生成する。
 
+    強さは 3（普通）が最も出やすい分布。
+    脚質は均等ランダム。
+
     Args:
         count: 出走馬数（最大 len(HORSE_NAMES)）
 
@@ -198,5 +283,15 @@ def generate_race_horses(count: int = 8) -> List[Horse]:
         Horse のリスト（馬番1〜count）
     """
     names = random.sample(HORSE_NAMES, min(count, len(HORSE_NAMES)))
-    horses = [Horse(i + 1, names[i]) for i in range(count)]
+
+    # 強さ: 1〜5（3が最頻値になる正規分布で生成）
+    # weights: [1, 3, 5, 3, 1] → 3が最も出やすい
+    strength_weights = [1, 3, 5, 3, 1]
+
+    horses = []
+    for i in range(count):
+        strength = random.choices([1, 2, 3, 4, 5], weights=strength_weights)[0]
+        style    = random.choice(RUNNING_STYLES)
+        horses.append(Horse(i + 1, names[i], strength, style))
+
     return horses
