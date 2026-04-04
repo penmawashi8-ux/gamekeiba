@@ -232,6 +232,8 @@ class YouTubeClient:
             chat_id = details.get("activeLiveChatId")
             if not chat_id:
                 logger.error("ライブチャットIDが取得できません（配信中でない可能性）")
+            else:
+                logger.info("ライブチャットID取得成功: live_chat_id=%s", chat_id)
             return chat_id
         except Exception as e:
             logger.error("ライブチャットID取得エラー: %s", e)
@@ -248,10 +250,15 @@ class YouTubeClient:
             if self._next_page_token:
                 params["pageToken"] = self._next_page_token
 
+            logger.debug("チャットAPIポーリング開始: live_chat_id=%s pageToken=%s",
+                         self._live_chat_id, self._next_page_token)
             resp = self._youtube.liveChatMessages().list(**params).execute()
             self._next_page_token = resp.get("nextPageToken")
 
-            for item in resp.get("items", []):
+            items = resp.get("items", [])
+            logger.debug("コメント取得完了: %d件", len(items))
+
+            for item in items:
                 snippet = item.get("snippet", {})
                 author = item.get("authorDetails", {})
                 text = snippet.get("displayMessage", "")
@@ -261,7 +268,8 @@ class YouTubeClient:
                 cmd = parse_comment(channel_id, display_name, text, time.time())
                 if cmd:
                     self.command_queue.put(cmd)
-                    logger.debug("コマンド受信: %s %s", display_name, text)
+                    logger.info("コマンド認識: user=%s type=%s text=%r",
+                                display_name, cmd.command_type, text)
 
         except HttpError as e:
             logger.warning("YouTube API エラー: %s", e)
