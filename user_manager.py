@@ -9,12 +9,14 @@ import sqlite3
 import threading
 import logging
 from typing import Optional, List, Tuple
-from datetime import datetime
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
 DB_PATH = "users.db"
 INITIAL_BALANCE = 10_000  # 初期残高
+BROKE_THRESHOLD = 100     # この金額未満になったら破産扱い
+RESTORE_MINUTES = 10      # 破産から復活までの待機時間（分）
 
 
 class UserManager:
@@ -44,9 +46,15 @@ class UserManager:
                         display_name TEXT NOT NULL,
                         balance      INTEGER NOT NULL DEFAULT 10000,
                         created_at   TEXT DEFAULT CURRENT_TIMESTAMP,
-                        updated_at   TEXT DEFAULT CURRENT_TIMESTAMP
+                        updated_at   TEXT DEFAULT CURRENT_TIMESTAMP,
+                        broke_at     TEXT DEFAULT NULL
                     )
                 """)
+                # 既存DBへの列追加（初回のみ実行、既存なら無視）
+                try:
+                    conn.execute("ALTER TABLE users ADD COLUMN broke_at TEXT DEFAULT NULL")
+                except sqlite3.OperationalError:
+                    pass  # 列が既に存在する場合は無視
                 conn.commit()
                 logger.info("データベースを初期化しました: %s", self.db_path)
             finally:
@@ -129,7 +137,7 @@ class UserManager:
             conn = self._connect()
             try:
                 cursor = conn.execute(
-                    "SELECT balance FROM users WHERE channel_id = ?",
+                    "SELECT balance, broke_at FROM users WHERE channel_id = ?",
                     (channel_id,)
                 )
                 row = cursor.fetchone()
@@ -137,14 +145,69 @@ class UserManager:
                     return None
 
                 new_balance = max(0, row[0] + delta)
+                old_broke_at = row[1]
+                now = datetime.now().isoformat()
+
+                # 残高が BROKE_THRESHOLD 未満になった → broke_at を記録（初回のみ）
+                if new_balance < BROKE_THRESHOLD and old_broke_at is None:
+                    broke_at = now
+                    logger.info("破産検出: channel_id=%s balance=%d → %d分後に復活",
+                                channel_id, new_balance, RESTORE_MINUTES)
+                # 残高が BROKE_THRESHOLD 以上に回復した → broke_at をクリア
+                elif new_balance >= BROKE_THRESHOLD:
+                    broke_at = None
+                else:
+                    broke_at = old_broke_at  # 変更なし
+
                 conn.execute(
-                    "UPDATE users SET balance = ?, updated_at = ? WHERE channel_id = ?",
-                    (new_balance, datetime.now().isoformat(), channel_id)
+                    "UPDATE users SET balance = ?, updated_at = ?, broke_at = ? "
+                    "WHERE channel_id = ?",
+                    (new_balance, now, broke_at, channel_id)
                 )
                 conn.commit()
                 return new_balance
             finally:
                 conn.close()
+
+    def restore_broke_users(self) -> List[Tuple[str, str]]:
+        """
+        破産状態（残高 < BROKE_THRESHOLD）から RESTORE_MINUTES 分経過した
+        ユーザーの残高を INITIAL_BALANCE に戻す。
+
+        Returns:
+            復活したユーザーの [(channel_id, display_name), ...] リスト
+        """
+        restored = []
+        threshold_time = (
+            datetime.now() - timedelta(minutes=RESTORE_MINUTES)
+        ).isoformat()
+
+        with self._lock:
+            conn = self._connect()
+            try:
+                cursor = conn.execute(
+                    "SELECT channel_id, display_name FROM users "
+                    "WHERE broke_at IS NOT NULL AND broke_at <= ?",
+                    (threshold_time,)
+                )
+                targets = cursor.fetchall()
+
+                now = datetime.now().isoformat()
+                for channel_id, display_name in targets:
+                    conn.execute(
+                        "UPDATE users SET balance = ?, updated_at = ?, broke_at = NULL "
+                        "WHERE channel_id = ?",
+                        (INITIAL_BALANCE, now, channel_id)
+                    )
+                    restored.append((channel_id, display_name))
+                    logger.info("残高復活: %s → %d円", display_name, INITIAL_BALANCE)
+
+                if targets:
+                    conn.commit()
+            finally:
+                conn.close()
+
+        return restored
 
     def get_ranking(self, limit: int = 5) -> List[Tuple[str, int]]:
         """

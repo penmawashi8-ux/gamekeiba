@@ -196,6 +196,7 @@ class Game:
 
         self.race_count  = 0      # 消化レース数
         self.is_running  = True   # False にすると次フレームで終了
+        self._last_restore_check: float = 0.0  # 破産復活チェックの最終実行時刻
 
         # Pygame 初期化
         pygame.init()
@@ -254,6 +255,9 @@ class Game:
             # コマンドキューを処理
             self._process_commands()
 
+            # 破産ユーザーの残高復活チェック（30秒ごと）
+            self._check_restore_broke_users()
+
             # フェーズ更新
             if self.phase == Phase.BETTING:
                 self._update_betting()
@@ -279,6 +283,20 @@ class Game:
     # ──────────────────────────────────────────────
     # コマンド処理
     # ──────────────────────────────────────────────
+
+    def _check_restore_broke_users(self):
+        """破産状態から10分経過したユーザーの残高を初期値に戻す（30秒ごとにチェック）"""
+        import time as _time
+        now = _time.time()
+        if now - self._last_restore_check < 30.0:
+            return
+        self._last_restore_check = now
+
+        restored = self.user_manager.restore_broke_users()
+        for _, display_name in restored:
+            self._add_message(
+                f"[復活] {display_name}さんの残高が{10000:,}円に回復しました！"
+            )
 
     def _process_commands(self):
         """キューからコマンドをすべて読み出して処理する"""
