@@ -340,8 +340,12 @@ class Game:
             )
             return
 
-        # 残高を先に引く
+        # 残高を先に引く（失敗時は馬券を登録しない）
         new_bal = self.user_manager.update_balance(cmd.channel_id, -amount)
+        if new_bal is None:
+            logger.error("update_balance が None を返しました: %s", cmd.channel_id)
+            return
+
         self._real_bettors.add(cmd.channel_id)  # 実ユーザーとして記録
 
         if cmd.command_type == CMD_WIN:
