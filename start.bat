@@ -2,30 +2,38 @@
 REM ============================================================
 REM YouTube LIVE 競馬ゲーム 起動スクリプト（Windows用）
 REM ============================================================
-REM 使用前に以下を設定してください:
-REM   1. YOUTUBE_API_KEY を設定
-REM   2. VIDEO_ID を設定（またはコマンドライン引数で渡す）
-REM   3. OBS_PASSWORD を設定（OBSのWebSocketパスワード）
+REM 使い方:
+REM   start.bat <VIDEO_ID> [レース数]
+REM   例) start.bat abc123XYZ 10
 REM
-REM タスクスケジューラ登録コマンド（毎日19時に実行）:
-REM   schtasks /create /tn "競馬ゲーム" /tr "C:\path\to\start.bat" /sc daily /st 19:00
+REM 事前に以下の環境変数を Windows のシステム環境変数に設定してください:
+REM   YOUTUBE_API_KEY  ... YouTube Data API v3 のAPIキー（必須）
+REM   OBS_PASSWORD     ... OBS WebSocket パスワード（任意）
+REM
+REM タスクスケジューラ登録例（毎日19時に VIDEO_ID abc123XYZ で10レース実行）:
+REM   schtasks /create /tn "競馬ゲーム" ^
+REM     /tr "\"C:\path\to\gamekeiba\start.bat\" abc123XYZ 10" ^
+REM     /sc daily /st 19:00 /ru SYSTEM
 REM ============================================================
 
-REM ── 設定項目 ──────────────────────────────────────────────
-set YOUTUBE_API_KEY=YOUR_YOUTUBE_API_KEY_HERE
-set OBS_PASSWORD=
-set GAME_FONT_PATH=
-
-REM 引数からvideo_idとレース数を受け取る
+REM ── 引数からvideo_idとレース数を受け取る ──────────────────
 set VIDEO_ID=%1
 set RACES=%2
-if "%VIDEO_ID%"=="" set VIDEO_ID=YOUR_VIDEO_ID_HERE
 if "%RACES%"=="" set RACES=10
 
-REM スクリプトのディレクトリに移動
+REM ── YOUTUBE_API_KEY の確認（環境変数から読み込む） ────────
+if "%YOUTUBE_API_KEY%"=="" (
+    echo [ERROR] 環境変数 YOUTUBE_API_KEY が設定されていません。
+    echo         Windowsのシステム環境変数に設定してから再実行してください。
+    pause
+    exit /b 1
+)
+
+REM ── スクリプトのディレクトリに移動 ───────────────────────
 cd /d "%~dp0"
 
 REM ── 日本語フォント自動検索 ────────────────────────────────
+set GAME_FONT_PATH=
 if exist "C:\Windows\Fonts\meiryo.ttc" (
     set GAME_FONT_PATH=C:\Windows\Fonts\meiryo.ttc
     goto :font_found
@@ -48,7 +56,7 @@ if exist ".venv\Scripts\activate.bat" (
     call .venv\Scripts\activate.bat
 ) else (
     echo [INFO] 仮想環境を作成します...
-    python -m venv .venv
+    py -3.12 -m venv .venv
     call .venv\Scripts\activate.bat
     pip install --upgrade pip
     pip install -r requirements.txt
@@ -61,11 +69,11 @@ echo  video_id : %VIDEO_ID%
 echo  races    : %RACES%
 echo ========================================
 
-if "%VIDEO_ID%"=="YOUR_VIDEO_ID_HERE" (
-    echo [INFO] VIDEO_ID が未設定です。テストモードで起動します。
-    python main.py --test --races %RACES%
+if "%VIDEO_ID%"=="" (
+    echo [INFO] VIDEO_ID が未指定です。テストモードで起動します。
+    py -3.12 main.py --test --races %RACES% --no-obs
 ) else (
-    python main.py %VIDEO_ID% --races %RACES%
+    py -3.12 main.py %VIDEO_ID% --races %RACES% --no-obs
 )
 
 echo ========================================

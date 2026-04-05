@@ -138,9 +138,32 @@ vim start.sh
 
 ### Windows（`start.bat`）
 
+**事前準備：** Windowsのシステム環境変数に `YOUTUBE_API_KEY` を設定してください（後述）。
+
 ```bat
-start.bat                       # デフォルト設定
-start.bat abc123XYZ 5           # video_id と5レース指定
+REM 基本起動（VIDEO_IDを引数で渡す）
+start.bat abc123XYZ
+
+REM レース数を指定して起動（10レース後に自動終了）
+start.bat abc123XYZ 10
+
+REM VIDEO_ID 未指定の場合はテストモードで起動
+start.bat
+```
+
+#### Windows 環境変数の設定方法
+
+1. `Win + R` → `sysdm.cpl` → Enter
+2. 「詳細設定」タブ → 「環境変数」をクリック
+3. 「システム環境変数」の「新規」をクリック
+4. 変数名: `YOUTUBE_API_KEY`、変数値: 取得したAPIキーを入力
+5. OK で保存 → コマンドプロンプトを再起動
+
+またはコマンドプロンプト（管理者）で一括設定：
+
+```bat
+REM システム環境変数に恒久設定（管理者権限が必要）
+setx YOUTUBE_API_KEY "AIza..." /M
 ```
 
 ---
@@ -162,25 +185,66 @@ crontab -e
 
 ### Windows（タスクスケジューラ）
 
-**GUIで設定する場合:**
-1. 「タスクスケジューラ」を開く
-2. 「基本タスクの作成」をクリック
-3. 名前: `競馬ゲーム`
-4. トリガー: 「毎日」→ 時刻を設定
-5. 操作: 「プログラムの開始」→ `C:\path\to\gamekeiba\start.bat`
+#### コマンドラインで登録する場合（推奨）
 
-**コマンドラインで登録する場合:**
+管理者権限のコマンドプロンプトで実行してください。
 
 ```bat
-REM 毎日19時に実行
-schtasks /create /tn "競馬ゲーム" /tr "C:\path\to\gamekeiba\start.bat" /sc daily /st 19:00
+REM 毎日19時に abc123XYZ を 10レース実行（ログ出力あり）
+schtasks /create /tn "競馬ゲーム" ^
+  /tr "\"C:\path\to\gamekeiba\start.bat\" abc123XYZ 10" ^
+  /sc daily /st 19:00 /ru SYSTEM
 
 REM タスクの確認
-schtasks /query /tn "競馬ゲーム"
+schtasks /query /tn "競馬ゲーム" /fo LIST /v
 
 REM タスクの削除
 schtasks /delete /tn "競馬ゲーム" /f
 ```
+
+#### GUIで設定する場合
+
+1. `Win + R` → `taskschd.msc` → Enter でタスクスケジューラを開く
+2. 右ペインの「タスクの作成」をクリック（※「基本タスク」ではなく「タスクの作成」を使う）
+3. **「全般」タブ**
+   - 名前: `競馬ゲーム`
+   - セキュリティオプション: 「ユーザーがログオンしているかどうかにかかわらず実行する」を選択
+   - 「最上位の特権で実行する」にチェック
+4. **「トリガー」タブ** → 「新規」
+   - タスクの開始: 「スケジュールに従う」
+   - 毎日・時刻を指定（例: 19:00:00）
+5. **「操作」タブ** → 「新規」
+   - 操作: 「プログラムの開始」
+   - プログラム/スクリプト: `C:\path\to\gamekeiba\start.bat`
+   - 引数の追加: `abc123XYZ 10`（VIDEO_ID とレース数）
+   - 開始（オプション）: `C:\path\to\gamekeiba`
+6. **「条件」タブ**（スリープ起動の設定）
+   - 「コンピューターをスリープ解除してこのタスクを実行する」にチェック ✅
+   - 「AC電源に接続している場合にのみタスクを開始する」のチェックを **外す**（ノートPC等でバッテリー動作する場合）
+7. **「設定」タブ**
+   - 「タスクを要求時に実行する」にチェック
+   - 「スケジュールされた開始時刻に実行中でも、タスクが終了しない場合は強制終了する」にチェック
+8. OK → Windows ログインパスワードを入力して保存
+
+#### スリープ中でも自動起動させる追加設定
+
+Windowsの電源設定でスリープ解除タイマーを有効にする必要があります。
+
+```bat
+REM 管理者権限のコマンドプロンプトで実行
+REM スリープ解除タイマーを有効にする
+powercfg /setacvalueindex SCHEME_CURRENT SUB_SLEEP RTCWAKE 1
+powercfg /setdcvalueindex SCHEME_CURRENT SUB_SLEEP RTCWAKE 1
+powercfg /setactive SCHEME_CURRENT
+
+REM 設定確認
+powercfg /query SCHEME_CURRENT SUB_SLEEP RTCWAKE
+```
+
+または GUI で設定する場合：
+1. `Win + R` → `powercfg.cpl` → Enter
+2. 現在の電源プランの「プラン設定の変更」→「詳細な電源設定の変更」
+3. 「スリープ」→「スリープ解除タイマーの許可」→「有効」に設定
 
 ---
 
