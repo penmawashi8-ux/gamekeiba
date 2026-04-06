@@ -123,8 +123,8 @@ class OBSController:
 
         try:
             self._client.set_stream_service_settings(
-                stream_service_type="rtmp_custom",
-                stream_service_settings={
+                ss_type="rtmp_custom",
+                ss_settings={
                     "server": rtmp_server,
                     "key": stream_key,
                 },

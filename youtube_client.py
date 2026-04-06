@@ -257,10 +257,13 @@ class YouTubeClient:
             resp = self._youtube.liveChatMessages().list(**params).execute()
             self._next_page_token = resp.get("nextPageToken")
 
-            # APIが推奨する待機時間を取得（クォータ節約）
+            # APIが推奨する待機時間を取得（最大10秒にキャップ）
             interval_ms = resp.get("pollingIntervalMillis")
             if interval_ms:
-                self._poll_interval = max(interval_ms / 1000.0, self.POLL_INTERVAL)
+                new_interval = min(interval_ms / 1000.0, 10.0)
+                if new_interval != self._poll_interval:
+                    logger.info("ポーリング間隔: %.1f秒 (API推奨: %dms)", new_interval, interval_ms)
+                    self._poll_interval = new_interval
 
             items = resp.get("items", [])
             if items:
