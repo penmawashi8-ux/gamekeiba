@@ -126,6 +126,28 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="配信開始時刻（例: 2025-01-01T18:00:00Z）",
     )
 
+    # APIキー（環境変数の代替）
+    parser.add_argument(
+        "--api-key",
+        default="",
+        metavar="KEY",
+        help="YouTube Data API キー（環境変数 YOUTUBE_API_KEY の代替）",
+    )
+
+    # OBS ストリーム設定（create_broadcast.py から自動取得）
+    parser.add_argument(
+        "--stream-server",
+        default="",
+        metavar="URL",
+        help="OBS に設定する RTMP サーバー URL",
+    )
+    parser.add_argument(
+        "--stream-key",
+        default="",
+        metavar="KEY",
+        help="OBS に設定する YouTube ストリームキー",
+    )
+
     # デバッグ
     parser.add_argument(
         "--debug",
@@ -180,11 +202,13 @@ def main() -> int:
         return 1
 
     # ── YouTube APIキー確認（テストモード以外）────────────────────
-    api_key = os.environ.get("YOUTUBE_API_KEY", "")
+    # --api-key 引数 > 環境変数 YOUTUBE_API_KEY の優先順位で取得
+    api_key = args.api_key or os.environ.get("YOUTUBE_API_KEY", "")
     if not args.test and not api_key:
         logger.error(
-            "環境変数 YOUTUBE_API_KEY が設定されていません\n"
-            "  export YOUTUBE_API_KEY='your_api_key'"
+            "YouTube API キーが設定されていません\n"
+            "  auto_start.bat の YOUTUBE_API_KEY を設定するか\n"
+            "  --api-key KEY を引数で渡してください"
         )
         return 1
 
@@ -209,6 +233,19 @@ def main() -> int:
     if not args.no_obs:
         connected = obs_ctrl.connect()
         if connected:
+            # stream_settings.txt があれば OBS のストリーム設定を自動更新
+            _ss = args.stream_server or ""
+            _sk = args.stream_key or ""
+            if not (_ss and _sk):
+                _settings_file = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                               "stream_settings.txt")
+                if os.path.exists(_settings_file):
+                    with open(_settings_file, encoding="utf-8") as _f:
+                        _lines = _f.read().strip().splitlines()
+                    if len(_lines) >= 2:
+                        _ss, _sk = _lines[0], _lines[1]
+            if _ss and _sk:
+                obs_ctrl.configure_stream(_ss, _sk)
             obs_ctrl.start_stream()
         else:
             logger.warning("OBS に接続できませんでした。OBS制御をスキップします。")
