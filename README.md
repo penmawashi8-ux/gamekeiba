@@ -194,22 +194,188 @@ schtasks /delete /tn "競馬ゲーム" /f
 
 ---
 
+## 毎日19時 自動配信の完全自動化
+
+`auto_start.bat` を使うと、YouTube配信枠の作成からゲーム起動まで全自動で実行できます。
+
+### 自動化の流れ
+
+```
+タスクスケジューラ（18:55）
+    ↓
+auto_start.bat
+    ↓
+create_broadcast.py  ← OAuth2認証でYouTube配信枠を自動作成（限定公開）
+    ↓  VIDEO_ID取得
+main.py VIDEO_ID --races 20  ← ゲーム起動（20レース固定）
+    ↓
+20レース終了後に自動終了・配信停止
+```
+
+---
+
+## OAuth2 の設定手順
+
+`create_broadcast.py` を使用するには、Google Cloud Console で OAuth2 クライアント ID を作成する必要があります。
+
+### 1. Google Cloud Console で OAuth2 クライアント ID を作成
+
+1. [Google Cloud Console](https://console.cloud.google.com/) にアクセス
+2. 既存のプロジェクトを選択（または新規プロジェクトを作成）
+3. 左メニュー「**APIとサービス**」→「**ライブラリ**」を開く
+4. 「**YouTube Data API v3**」を検索して**有効化**
+5. 左メニュー「**APIとサービス**」→「**認証情報**」を開く
+6. 上部の「**＋認証情報を作成**」→「**OAuth クライアント ID**」をクリック
+7. 「アプリケーションの種類」→「**デスクトップアプリ**」を選択
+8. 名前を入力（例: `競馬ゲーム`）して「**作成**」をクリック
+
+> **注意:** 初回は「OAuth 同意画面」の設定が必要です。  
+> 「外部」を選択し、アプリ名・メールアドレスを入力して保存してください。  
+> テスト用途であれば「テストユーザー」に自分のGoogleアカウントを追加するだけでOKです。
+
+### 2. client_secret.json のダウンロード
+
+1. 「認証情報」ページで作成したOAuthクライアントIDの右側にある **↓（ダウンロード）** アイコンをクリック
+2. JSONファイルがダウンロードされます
+3. ファイル名を `client_secret.json` に変更
+4. `gamekeiba` フォルダ（`auto_start.bat` と同じ場所）に配置
+
+```
+gamekeiba/
+├── client_secret.json  ← ここに配置
+├── auto_start.bat
+├── create_broadcast.py
+└── ...
+```
+
+### 3. 初回認証の実行
+
+仮想環境を有効化してから `create_broadcast.py` を実行します。
+
+```bat
+REM Windowsの場合
+cd C:\path\to\gamekeiba
+.venv\Scripts\activate
+pip install google-auth-oauthlib
+python create_broadcast.py
+```
+
+初回実行時にブラウザが自動で開き、Googleアカウントでの認証を求められます。  
+許可すると認証が完了し、`token.json` が自動生成されます。
+
+成功すると標準出力に `VIDEO_ID`（例: `abc123XYZ`）が出力されます。
+
+### 4. token.json の場所と役割
+
+| 項目 | 内容 |
+|------|------|
+| **場所** | `gamekeiba/token.json`（自動生成） |
+| **役割** | OAuth2 アクセストークンとリフレッシュトークンを保存 |
+| **2回目以降** | token.json を自動読み込みし、ブラウザ認証なしで実行 |
+| **期限切れ時** | リフレッシュトークンで自動更新（手動操作不要） |
+| **注意** | token.json はアカウントへのアクセス権を含むため、`.gitignore` に追加して管理してください |
+
+```bash
+# .gitignore に追加推奨
+echo "token.json" >> .gitignore
+echo "client_secret.json" >> .gitignore
+```
+
+---
+
+## Windowsタスクスケジューラの設定手順
+
+`auto_start.bat` を毎日18:55に自動実行する設定です。
+
+### GUI での設定手順
+
+1. Windowsキー → 「**タスクスケジューラ**」を検索して開く
+2. 右側パネルの「**タスクの作成**」をクリック（※「基本タスクの作成」ではなく「タスクの作成」を選ぶこと）
+3. **全般タブ**
+   - 名前: `競馬LIVE自動配信`
+   - 「**最上位の特権で実行する**」にチェック ← 管理者権限
+   - 構成: `Windows 10`
+4. **トリガータブ** →「新規」をクリック
+   - 開始: `毎日`
+   - 時刻: `18:55:00`
+   - 「有効」にチェック
+5. **操作タブ** →「新規」をクリック
+   - 操作: `プログラムの開始`
+   - プログラム/スクリプト: `C:\path\to\gamekeiba\auto_start.bat`
+   - 作業フォルダー: `C:\path\to\gamekeiba`
+6. **条件タブ**
+   - 「**タスクを実行するためにスリープを解除する**」にチェック ← スリープ解除
+   - 「AC電源で実行している場合のみタスクを開始する」のチェックを**外す**（ノートPC使用時）
+7. **設定タブ**
+   - 「タスクが既に実行中の場合に適用されるルール」→「新しいインスタンスを実行しない」
+8. 「OK」をクリックして保存
+
+### コマンドラインでの設定（管理者権限のコマンドプロンプト）
+
+```bat
+REM タスクを作成（毎日18:55実行、最上位権限、スリープ解除）
+schtasks /create ^
+  /tn "競馬LIVE自動配信" ^
+  /tr "C:\path\to\gamekeiba\auto_start.bat" ^
+  /sc daily ^
+  /st 18:55 ^
+  /rl highest ^
+  /f
+
+REM ※スリープ解除はGUIで追加設定が必要です（コマンドラインでは設定不可）
+
+REM タスクの確認
+schtasks /query /tn "競馬LIVE自動配信" /fo list /v
+
+REM タスクの削除
+schtasks /delete /tn "競馬LIVE自動配信" /f
+```
+
+### スリープ解除をコマンドラインで設定する方法
+
+```bat
+REM PowerShellでスリープ解除フラグを有効化（管理者で実行）
+powershell -Command ^
+  "$task = Get-ScheduledTask -TaskName '競馬LIVE自動配信'; ^
+   $task.Settings.WakeToRun = $true; ^
+   Set-ScheduledTask -InputObject $task"
+```
+
+### 設定確認
+
+```bat
+REM 手動でタスクをテスト実行
+schtasks /run /tn "競馬LIVE自動配信"
+
+REM 実行履歴を確認（タスクスケジューラのGUIで「履歴」タブ）
+```
+
+> **BIOS設定について**  
+> スリープからの自動起動には、BIOS/UEFIで「Wake on RTC」または「RTC Alarm」が有効になっている必要があります。  
+> BIOS設定はメーカーによって異なるため、PCのマニュアルを参照してください。
+
+---
+
 ## ファイル構成
 
 ```
 gamekeiba/
-├── main.py           # エントリーポイント、引数処理
-├── game.py           # ゲームループ、フェーズ管理、Pygame描画
-├── horse.py          # 馬クラス、アニメーション描画
-├── betting.py        # 馬券管理、パリミュチュエルオッズ計算
-├── user_manager.py   # ユーザー管理（SQLite）
-├── youtube_client.py # YouTube APIポーリング、コマンドパース
-├── obs_controller.py # OBS WebSocket制御
-├── requirements.txt  # 依存パッケージ
-├── start.sh          # 起動スクリプト（Linux/Mac）
-├── start.bat         # 起動スクリプト（Windows）
-├── README.md         # このファイル
-└── users.db          # ユーザーデータ（自動生成）
+├── main.py              # エントリーポイント、引数処理
+├── game.py              # ゲームループ、フェーズ管理、Pygame描画
+├── horse.py             # 馬クラス、アニメーション描画
+├── betting.py           # 馬券管理、パリミュチュエルオッズ計算
+├── user_manager.py      # ユーザー管理（SQLite）
+├── youtube_client.py    # YouTube APIポーリング、コマンドパース
+├── obs_controller.py    # OBS WebSocket制御
+├── create_broadcast.py  # YouTube配信枠の自動作成（OAuth2）
+├── auto_start.bat       # 全自動配信スクリプト（Windows）
+├── start.bat            # 手動起動スクリプト（Windows）
+├── start.sh             # 起動スクリプト（Linux/Mac）
+├── requirements.txt     # 依存パッケージ
+├── client_secret.json   # OAuth2クライアント情報（要配置・gitignore推奨）
+├── token.json           # 認証トークン（自動生成・gitignore推奨）
+├── README.md            # このファイル
+└── users.db             # ユーザーデータ（自動生成）
 ```
 
 ---
