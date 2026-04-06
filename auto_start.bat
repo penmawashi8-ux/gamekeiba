@@ -72,16 +72,14 @@ for /f "usebackq delims=" %%i in (`python create_broadcast.py 2^>con`) do set VI
 
 if "%VIDEO_ID%"=="" (
     echo.
-    echo [ERROR] Failed to create broadcast.
+    echo [WARN] Broadcast creation failed. Starting in test mode.
+    echo        To run live, check:
+    echo          1. client_secret.json exists in this folder
+    echo          2. Internet connection is available
+    echo          3. Run "python create_broadcast.py" manually for details
     echo.
-    echo Checklist:
-    echo   1. client_secret.json exists in this folder
-    echo   2. YOUTUBE_API_KEY is set correctly
-    echo   3. Internet connection is available
-    echo   4. Run "python create_broadcast.py" manually for details
-    echo.
-    pause
-    exit /b 1
+    python main.py --test --races 20
+    goto :end
 )
 
 echo [INFO] VIDEO_ID: %VIDEO_ID%
@@ -97,6 +95,7 @@ echo.
 
 python main.py %VIDEO_ID% --races 20
 
+:end
 echo.
 echo ========================================
 echo  Broadcast ended. (%date% %time%)

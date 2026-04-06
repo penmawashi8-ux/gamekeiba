@@ -5,8 +5,8 @@ YouTube Data API v3 でライブチャットを5秒間隔でポーリングし�
 コマンドをキューに投入する。
 
 コマンド仕様:
-  !単勝 [馬番] [金額]         例: !単勝 3 500
-  !馬連 [馬番] [馬番] [金額]  例: !馬連 2 5 1000
+  !単勝 [馬番] [金額]   例: !単勝 3 500
+  !複勝 [馬番] [金額]   例: !複勝 3 500
   !残高
 
 --test 引数でダミーコメントを投入するテストモードも提供する。
@@ -27,10 +27,10 @@ logger = logging.getLogger(__name__)
 # コマンドデータクラス
 # ──────────────────────────────────────────────────────────────────
 
-CMD_WIN = "win_bet"
-CMD_QUINELLA = "quinella_bet"
+CMD_WIN     = "win_bet"
+CMD_SHOW    = "show_bet"    # 複勝
 CMD_BALANCE = "balance"
-CMD_ERROR = "error"   # 購入金額が100円単位でない等のバリデーションエラー
+CMD_ERROR   = "error"   # 購入金額が100円単位でない等のバリデーションエラー
 
 
 @dataclass
@@ -38,7 +38,7 @@ class ParsedCommand:
     """パースされたコメントコマンド"""
     channel_id: str
     display_name: str
-    command_type: str         # CMD_WIN | CMD_QUINELLA | CMD_BALANCE | CMD_ERROR
+    command_type: str         # CMD_WIN | CMD_SHOW | CMD_BALANCE | CMD_ERROR
     horse1: Optional[int] = None
     horse2: Optional[int] = None
     amount: Optional[int] = None
@@ -74,10 +74,9 @@ def parse_comment(channel_id: str, display_name: str,
         parts = text.split()
         if len(parts) == 3:
             try:
-                horse = int(parts[1])
+                horse  = int(parts[1])
                 amount = int(parts[2])
                 if 1 <= horse <= 8 and amount > 0:
-                    # 100円単位チェック
                     if amount % 100 != 0:
                         return ParsedCommand(
                             channel_id=channel_id,
@@ -105,37 +104,33 @@ def parse_comment(channel_id: str, display_name: str,
                 pass
         return None
 
-    # 馬連: !馬連 馬番 馬番 金額
-    if text.startswith("!馬連"):
+    # 複勝: !複勝 馬番 金額
+    if text.startswith("!複勝"):
         parts = text.split()
-        if len(parts) == 4:
+        if len(parts) == 3:
             try:
-                h1 = int(parts[1])
-                h2 = int(parts[2])
-                amount = int(parts[3])
-                if 1 <= h1 <= 8 and 1 <= h2 <= 8 and h1 != h2 and amount > 0:
-                    # 100円単位チェック
+                horse  = int(parts[1])
+                amount = int(parts[2])
+                if 1 <= horse <= 8 and amount > 0:
                     if amount % 100 != 0:
                         return ParsedCommand(
                             channel_id=channel_id,
                             display_name=display_name,
                             command_type=CMD_ERROR,
-                            horse1=h1,
-                            horse2=h2,
+                            horse1=horse,
                             amount=amount,
                             raw_text=text,
                             timestamp=timestamp,
                             error_message=(
                                 f"金額は100円単位で入力してください "
-                                f"（例: !馬連 {h1} {h2} {(amount // 100 + 1) * 100}）"
+                                f"（例: !複勝 {horse} {(amount // 100 + 1) * 100}）"
                             ),
                         )
                     return ParsedCommand(
                         channel_id=channel_id,
                         display_name=display_name,
-                        command_type=CMD_QUINELLA,
-                        horse1=h1,
-                        horse2=h2,
+                        command_type=CMD_SHOW,
+                        horse1=horse,
                         amount=amount,
                         raw_text=text,
                         timestamp=timestamp,
@@ -180,7 +175,7 @@ class YouTubeClient:
             command_queue: コマンド投入先キュー
         """
         self.video_id = video_id
-        self.api_key = api_key
+        self.api_key  = api_key
         self.command_queue = command_queue
 
         self._stop_event = threading.Event()
@@ -328,8 +323,8 @@ class TestClient:
             num_horses:    出走馬数（馬番の上限）
         """
         self.command_queue = command_queue
-        self.num_horses = num_horses
-        self._stop_event = threading.Event()
+        self.num_horses    = num_horses
+        self._stop_event   = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self.betting_active = threading.Event()  # ベット受付中フラグ
 
@@ -371,7 +366,7 @@ class TestClient:
     def _random_command(self, channel_id: str,
                         display_name: str) -> Optional[ParsedCommand]:
         """ランダムなコマンドを生成する"""
-        r = random.random()
+        r      = random.random()
         amount = random.choice([100, 200, 300, 500, 1000])
 
         if r < 0.05:
@@ -396,16 +391,15 @@ class TestClient:
                 timestamp=time.time(),
             )
         else:
-            # 45%: 馬連
-            h1, h2 = random.sample(range(1, self.num_horses + 1), 2)
+            # 45%: 複勝
+            horse = random.randint(1, self.num_horses)
             return ParsedCommand(
                 channel_id=channel_id,
                 display_name=display_name,
-                command_type=CMD_QUINELLA,
-                horse1=h1,
-                horse2=h2,
+                command_type=CMD_SHOW,
+                horse1=horse,
                 amount=amount,
-                raw_text=f"!馬連 {h1} {h2} {amount}",
+                raw_text=f"!複勝 {horse} {amount}",
                 timestamp=time.time(),
             )
 
@@ -426,18 +420,13 @@ def create_live_broadcast(api_key: str, title: str,
 
     Returns:
         作成された video_id、失敗時は None
-
-    Note:
-        この機能は OAuth2 認証が必要です。
-        Google Cloud Console でOAuth2クライアントを設定し、
-        google-auth-oauthlib をインストールしてください。
     """
     try:
         from google_auth_oauthlib.flow import InstalledAppFlow
         from googleapiclient.discovery import build as yt_build
 
         SCOPES = ["https://www.googleapis.com/auth/youtube"]
-        flow = InstalledAppFlow.from_client_secrets_file("client_secrets.json", SCOPES)
+        flow   = InstalledAppFlow.from_client_secrets_file("client_secrets.json", SCOPES)
         credentials = flow.run_local_server(port=0)
         youtube = yt_build("youtube", "v3", credentials=credentials)
 

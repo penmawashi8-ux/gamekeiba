@@ -3,7 +3,7 @@
 
 パリミュチュエル方式でオッズを計算し、馬券を管理する。
   - 単勝オッズ = 全単勝売上 × 0.80 ÷ その馬の単勝売上
-  - 馬連オッズ = 全馬連売上 × 0.75 ÷ その組み合わせの売上
+  - 複勝オッズ = 全複勝売上 × 0.75 ÷ その馬の複勝売上
 馬券が売れるたびにリアルタイムで再計算する。
 """
 
@@ -15,8 +15,8 @@ from typing import Dict, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 # 控除率
-WIN_TAKEOUT = 0.80        # 単勝: 80%払い戻し
-QUINELLA_TAKEOUT = 0.75   # 馬連: 75%払い戻し
+WIN_TAKEOUT  = 0.80   # 単勝: 80%払い戻し
+SHOW_TAKEOUT = 0.75   # 複勝: 75%払い戻し
 
 
 @dataclass
@@ -24,10 +24,10 @@ class Bet:
     """1件の馬券情報"""
     channel_id: str
     display_name: str
-    bet_type: str       # "win" | "quinella"
+    bet_type: str       # "win" | "show"
     horse1: int         # 馬番（1〜8）
-    horse2: Optional[int]  # 馬連の2頭目（単勝は None）
-    amount: int
+    horse2: Optional[int] = None  # 未使用（互換性のため残す）
+    amount: int = 0
 
 
 @dataclass
@@ -36,7 +36,7 @@ class PayoutResult:
     channel_id: str
     display_name: str
     bet_type: str
-    horse_label: str    # 例: "3" / "2-5"
+    horse_label: str    # 例: "3"
     bet_amount: int
     payout_amount: int  # 払い戻し金額（元金込み）
     odds: float
@@ -50,15 +50,6 @@ class BettingManager:
         self.reset()
 
     # ──────────────────────────────────────────────
-    # 内部ユーティリティ
-    # ──────────────────────────────────────────────
-
-    @staticmethod
-    def _quinella_key(a: int, b: int) -> Tuple[int, int]:
-        """馬連のキーを正規化（小さい馬番が先）"""
-        return (min(a, b), max(a, b))
-
-    # ──────────────────────────────────────────────
     # レース管理
     # ──────────────────────────────────────────────
 
@@ -68,8 +59,8 @@ class BettingManager:
             self._bets: List[Bet] = []
             # 単勝: {馬番: 合計賭け金}
             self._win_pool: Dict[int, int] = {}
-            # 馬連: {(馬番, 馬番): 合計賭け金}
-            self._quinella_pool: Dict[Tuple[int, int], int] = {}
+            # 複勝: {馬番: 合計賭け金}
+            self._show_pool: Dict[int, int] = {}
 
     # ──────────────────────────────────────────────
     # 馬券購入
@@ -81,10 +72,10 @@ class BettingManager:
         単勝馬券を購入する。
 
         Args:
-            channel_id: ユーザーID
+            channel_id:   ユーザーID
             display_name: 表示名
-            horse: 馬番（1〜8）
-            amount: 賭け金
+            horse:        馬番（1〜8）
+            amount:       賭け金
 
         Returns:
             True: 購入成功
@@ -98,28 +89,27 @@ class BettingManager:
             logger.debug("単勝購入: %s 馬番%d %d円", display_name, horse, amount)
         return True
 
-    def place_quinella_bet(self, channel_id: str, display_name: str,
-                           horse1: int, horse2: int, amount: int) -> bool:
+    def place_show_bet(self, channel_id: str, display_name: str,
+                       horse: int, amount: int) -> bool:
         """
-        馬連馬券を購入する（着順不問）。
+        複勝馬券を購入する（1〜3着に入れば的中）。
 
         Args:
-            channel_id: ユーザーID
+            channel_id:   ユーザーID
             display_name: 表示名
-            horse1, horse2: 2頭の馬番
-            amount: 賭け金
+            horse:        馬番（1〜8）
+            amount:       賭け金
 
         Returns:
             True: 購入成功
         """
-        if amount <= 0 or horse1 == horse2:
+        if amount <= 0:
             return False
-        key = self._quinella_key(horse1, horse2)
         with self._lock:
-            bet = Bet(channel_id, display_name, "quinella", horse1, horse2, amount)
+            bet = Bet(channel_id, display_name, "show", horse, None, amount)
             self._bets.append(bet)
-            self._quinella_pool[key] = self._quinella_pool.get(key, 0) + amount
-            logger.debug("馬連購入: %s %d-%d %d円", display_name, horse1, horse2, amount)
+            self._show_pool[horse] = self._show_pool.get(horse, 0) + amount
+            logger.debug("複勝購入: %s 馬番%d %d円", display_name, horse, amount)
         return True
 
     # ──────────────────────────────────────────────
@@ -143,21 +133,21 @@ class BettingManager:
                     result[horse] = round(total * WIN_TAKEOUT / pool, 1)
             return result
 
-    def get_quinella_odds(self) -> Dict[Tuple[int, int], float]:
+    def get_show_odds(self) -> Dict[int, float]:
         """
-        馬連オッズを返す。
+        複勝オッズを返す。
 
         Returns:
-            {(馬番, 馬番): オッズ} — 誰も買っていない組み合わせは含まない
+            {馬番: オッズ} — 誰も買っていない馬は含まない
         """
         with self._lock:
-            total = sum(self._quinella_pool.values())
+            total = sum(self._show_pool.values())
             if total == 0:
                 return {}
             result = {}
-            for key, pool in self._quinella_pool.items():
+            for horse, pool in self._show_pool.items():
                 if pool > 0:
-                    result[key] = round(total * QUINELLA_TAKEOUT / pool, 1)
+                    result[horse] = round(total * SHOW_TAKEOUT / pool, 1)
             return result
 
     def get_win_pool_total(self) -> int:
@@ -165,51 +155,51 @@ class BettingManager:
         with self._lock:
             return sum(self._win_pool.values())
 
-    def get_quinella_pool_total(self) -> int:
-        """馬連売上合計を返す"""
+    def get_show_pool_total(self) -> int:
+        """複勝売上合計を返す"""
         with self._lock:
-            return sum(self._quinella_pool.values())
+            return sum(self._show_pool.values())
 
     # ──────────────────────────────────────────────
     # 払い戻し計算
     # ──────────────────────────────────────────────
 
-    def calculate_payouts(self, first: int, second: int) -> List[PayoutResult]:
+    def calculate_payouts(self, first: int, second: int,
+                          third: int) -> List[PayoutResult]:
         """
         着順に基づき全馬券の払い戻し金額を計算する。
 
         Args:
             first:  1着馬番
             second: 2着馬番
+            third:  3着馬番
 
         Returns:
             払い戻し対象の PayoutResult リスト
         """
         results: List[PayoutResult] = []
 
-        win_odds = self.get_win_odds()
-        quinella_odds = self.get_quinella_odds()
-        quinella_key = self._quinella_key(first, second)
+        win_odds  = self.get_win_odds()
+        show_odds = self.get_show_odds()
+        top3 = {first, second, third}
 
         with self._lock:
             for bet in self._bets:
                 payout = 0
-                odds = 0.0
-                label = ""
+                odds   = 0.0
+                label  = ""
 
                 if bet.bet_type == "win" and bet.horse1 == first:
                     # 単勝的中（最低1.0倍保証・10円単位切り捨て）
-                    odds = max(1.0, win_odds.get(first, 0.0))
+                    odds   = max(1.0, win_odds.get(first, 0.0))
                     payout = (int(bet.amount * odds) // 10) * 10
-                    label = str(first)
+                    label  = str(first)
 
-                elif bet.bet_type == "quinella":
-                    key = self._quinella_key(bet.horse1, bet.horse2)
-                    if key == quinella_key:
-                        # 馬連的中（最低1.0倍保証・10円単位切り捨て）
-                        odds = max(1.0, quinella_odds.get(quinella_key, 0.0))
-                        payout = (int(bet.amount * odds) // 10) * 10
-                        label = f"{key[0]}-{key[1]}"
+                elif bet.bet_type == "show" and bet.horse1 in top3:
+                    # 複勝的中（1〜3着いずれか）
+                    odds   = max(1.0, show_odds.get(bet.horse1, 0.0))
+                    payout = (int(bet.amount * odds) // 10) * 10
+                    label  = str(bet.horse1)
 
                 if payout > 0:
                     results.append(PayoutResult(

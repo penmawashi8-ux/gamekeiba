@@ -24,7 +24,7 @@ from horse import (Horse, draw_horse, generate_race_horses,
                    TRACK_LENGTH, HORSE_COLORS, horse_num_text_color)
 from betting import BettingManager, PayoutResult
 from user_manager import UserManager
-from youtube_client import ParsedCommand, CMD_WIN, CMD_QUINELLA, CMD_BALANCE, CMD_ERROR
+from youtube_client import ParsedCommand, CMD_WIN, CMD_SHOW, CMD_BALANCE, CMD_ERROR
 
 logger = logging.getLogger(__name__)
 
@@ -320,7 +320,7 @@ class Game:
                 bal = user["balance"]
                 self._add_message(f"{cmd.display_name}: 残高 {bal:,}円")
 
-            elif cmd.command_type in (CMD_WIN, CMD_QUINELLA):
+            elif cmd.command_type in (CMD_WIN, CMD_SHOW):
                 # 馬券受付フェーズ以外は無視
                 if self.phase != Phase.BETTING:
                     continue
@@ -356,14 +356,13 @@ class Game:
                 f"{cmd.display_name}: 単勝 {cmd.horse1}番 {amount:,}円 "
                 f"（残{new_bal:,}円）"
             )
-        elif cmd.command_type == CMD_QUINELLA:
-            self.betting_manager.place_quinella_bet(
-                cmd.channel_id, cmd.display_name,
-                cmd.horse1, cmd.horse2, amount
+        elif cmd.command_type == CMD_SHOW:
+            self.betting_manager.place_show_bet(
+                cmd.channel_id, cmd.display_name, cmd.horse1, amount
             )
             self._add_message(
-                f"{cmd.display_name}: 馬連 {cmd.horse1}-{cmd.horse2}番 "
-                f"{amount:,}円 （残{new_bal:,}円）"
+                f"{cmd.display_name}: 複勝 {cmd.horse1}番 {amount:,}円 "
+                f"（残{new_bal:,}円）"
             )
 
     def _add_message(self, text: str):
@@ -447,11 +446,10 @@ class Game:
                     self.betting_manager.place_win_bet(bot_id, bot_name, horse, amount)
                     self._add_message(f"{bot_name}: !単勝 {horse} {amount:,}")
                 else:
-                    # 馬連
-                    h1, h2 = random.sample(range(1, NUM_HORSES + 1), 2)
-                    self.betting_manager.place_quinella_bet(
-                        bot_id, bot_name, h1, h2, amount)
-                    self._add_message(f"{bot_name}: !馬連 {h1} {h2} {amount:,}")
+                    # 複勝
+                    horse = random.randint(1, NUM_HORSES)
+                    self.betting_manager.place_show_bet(bot_id, bot_name, horse, amount)
+                    self._add_message(f"{bot_name}: !複勝 {horse} {amount:,}")
 
         logger.info("Bot自動参加（実ユーザー %d人）", len(self._real_bettors))
 
@@ -511,10 +509,11 @@ class Game:
 
         first  = self.finish_order[0].number
         second = self.finish_order[1].number
-        logger.info("着順: 1着=%d番, 2着=%d番", first, second)
+        third  = self.finish_order[2].number
+        logger.info("着順: 1着=%d番, 2着=%d番, 3着=%d番", first, second, third)
 
         # 払い戻し計算・残高反映（Botは払い戻し不要）
-        self.payout_results = self.betting_manager.calculate_payouts(first, second)
+        self.payout_results = self.betting_manager.calculate_payouts(first, second, third)
         for pr in self.payout_results:
             if pr.channel_id.startswith("BOT_"):
                 continue  # ダミーユーザーへの払い戻しはスキップ
@@ -580,61 +579,60 @@ class Game:
         left_rect = pygame.Rect(0, HEADER_H, SCREEN_W // 2, SCREEN_H - HEADER_H)
         _draw_panel(self.screen, left_rect, radius=0)
 
-        lx = 10
+        lx = 12
         ly = HEADER_H + 10
 
-        # 単勝オッズ
-        _draw_text_shadow(self.screen, "【単勝オッズ】", self.f_md, COL_YELLOW, lx, ly)
-        ly += 30
+        # タイトル
+        _draw_text_shadow(self.screen, "【単勝・複勝オッズ】", self.f_md, COL_YELLOW, lx, ly)
+        ly += 34
 
-        win_odds = self.betting_manager.get_win_odds()
+        win_odds  = self.betting_manager.get_win_odds()
+        show_odds = self.betting_manager.get_show_odds()
 
-        # ── 列の絶対X座標（lxからのオフセット）──────────────────
-        # f_xs(15px)基準: 日本語1文字≒15px、数字≒9px
-        TX_NUM   = lx + 5    # 馬番バッジ（幅24）
-        TX_NAME  = lx + 32   # 馬名（最大9文字 × 15px = 135px → 幅148）
-        TX_STARS = lx + 183  # 強さ★（5文字 × 15px = 75px → 幅82）
-        TX_STYLE = lx + 268  # 脚質略称（1文字 → 幅26）
-        TX_ODDS  = lx + 297  # オッズ（幅78）
-        TX_POOL  = lx + 378  # 売上（幅70）
-        TABLE_W  = 450        # 表全幅
+        # ── 列X座標（f_sm=18px基準）──────────────────────────
+        TX_NUM   = lx + 4     # 馬番バッジ（26×24px）
+        TX_NAME  = lx + 36    # 馬名（最大7文字 × 18px = 126px）
+        TX_STARS = lx + 170   # 強さ★（5文字 × 18px = 90px）
+        TX_STYLE = lx + 264   # 脚質略称（28px）
+        TX_WIN   = lx + 298   # 単勝オッズ（88px）
+        TX_SHOW  = lx + 392   # 複勝オッズ（88px）
+        TABLE_W  = 486
 
         # テーブルヘッダー
         for label, tx in [
             ("馬番", TX_NUM), ("馬名", TX_NAME), ("強さ", TX_STARS),
-            ("脚", TX_STYLE), ("オッズ", TX_ODDS), ("売上", TX_POOL),
+            ("脚", TX_STYLE), ("単勝", TX_WIN), ("複勝", TX_SHOW),
         ]:
-            self.screen.blit(self.f_xs.render(label, True, COL_DIM), (tx, ly))
-        ly += 20
+            self.screen.blit(self.f_sm.render(label, True, COL_DIM), (tx, ly))
+        ly += 24
         pygame.draw.line(self.screen, COL_BORDER, (lx, ly), (lx + TABLE_W, ly), 1)
-        ly += 3
+        ly += 4
 
-        win_pool = self.betting_manager.get_win_pool_total()
         for horse in self.horses:
-            odds = win_odds.get(horse.number)
-            pool = self.betting_manager._win_pool.get(horse.number, 0)
-            row_y = ly + 1
+            w_odds = win_odds.get(horse.number)
+            s_odds = show_odds.get(horse.number)
+            row_y  = ly + 1
 
-            # 馬番カラーバッジ（枠色に応じた文字色）
-            badge = pygame.Rect(TX_NUM, row_y, 20, 18)
+            # 馬番カラーバッジ
+            badge = pygame.Rect(TX_NUM, row_y, 26, 24)
             pygame.draw.rect(self.screen, horse.color, badge, border_radius=3)
-            ns = self.f_xs.render(str(horse.number), True,
+            ns = self.f_sm.render(str(horse.number), True,
                                   horse_num_text_color(horse.number))
-            self.screen.blit(ns, (badge.centerx - ns.get_width() // 2, badge.y + 1))
+            self.screen.blit(ns, (badge.centerx - ns.get_width() // 2, badge.y + 3))
 
             # 馬名（幅に収まるよう動的にフォントを縮小）
             name_w = TX_STARS - TX_NAME - 4
             self.screen.blit(
                 _fit_text(horse.name, COL_TEXT, name_w,
-                          [self.f_xs, self.f_xs2, self.f_xs3]),
-                (TX_NAME, row_y)
+                          [self.f_sm, self.f_xs, self.f_xs2, self.f_xs3]),
+                (TX_NAME, row_y + 3)
             )
 
             # 強さ★（色分け）
             star_col = COL_GOLD if horse.strength >= 4 \
                        else COL_DIM if horse.strength <= 2 else COL_YELLOW
             self.screen.blit(
-                self.f_xs.render(horse.stars, True, star_col), (TX_STARS, row_y))
+                self.f_sm.render(horse.stars, True, star_col), (TX_STARS, row_y + 3))
 
             # 脚質略称（色分け）
             style_col = {
@@ -642,45 +640,39 @@ class Game:
                 "差し": COL_GREEN_BR, "追い込み": COL_SILVER,
             }.get(horse.running_style, COL_TEXT)
             self.screen.blit(
-                self.f_xs.render(horse.style_short, True, style_col), (TX_STYLE, row_y))
+                self.f_sm.render(horse.style_short, True, style_col),
+                (TX_STYLE, row_y + 3))
 
-            # オッズ（表示は最低1.0倍）
-            if odds:
-                disp_odds = max(1.0, odds)
-                odds_col = COL_GREEN_BR if disp_odds >= 5.0 else COL_YELLOW
+            # 単勝オッズ
+            if w_odds:
+                dw = max(1.0, w_odds)
+                wc = COL_GREEN_BR if dw >= 5.0 else COL_YELLOW
                 self.screen.blit(
-                    self.f_xs.render(f"{disp_odds:.1f}倍", True, odds_col), (TX_ODDS, row_y))
+                    self.f_sm.render(f"{dw:.1f}倍", True, wc), (TX_WIN, row_y + 3))
             else:
                 self.screen.blit(
-                    self.f_xs.render("---", True, COL_DIM), (TX_ODDS, row_y))
+                    self.f_sm.render("---", True, COL_DIM), (TX_WIN, row_y + 3))
 
-            # 売上
-            self.screen.blit(
-                self.f_xs.render(f"{pool:,}円", True, COL_DIM), (TX_POOL, row_y))
+            # 複勝オッズ
+            if s_odds:
+                ds = max(1.0, s_odds)
+                sc = COL_GREEN_BR if ds >= 3.0 else COL_YELLOW
+                self.screen.blit(
+                    self.f_sm.render(f"{ds:.1f}倍", True, sc), (TX_SHOW, row_y + 3))
+            else:
+                self.screen.blit(
+                    self.f_sm.render("---", True, COL_DIM), (TX_SHOW, row_y + 3))
 
-            ly += 22
-
-        ly += 6
-        pygame.draw.line(self.screen, COL_BORDER, (lx, ly), (lx + 450, ly), 1)
-        ly += 6
-
-        # 馬連オッズ（購入済み組み合わせのみ）
-        quinella_odds = self.betting_manager.get_quinella_odds()
-        if quinella_odds:
-            _draw_text_shadow(self.screen, "【馬連オッズ】", self.f_md, COL_YELLOW, lx, ly)
             ly += 28
-            for (h1, h2), odds in sorted(quinella_odds.items()):
-                pool = self.betting_manager._quinella_pool.get((h1, h2), 0)
-                disp_odds = max(1.0, odds)
-                line = f"  {h1}-{h2}番:  {disp_odds:.1f}倍  ({pool:,}円)"
-                col = COL_GREEN_BR if disp_odds >= 5.0 else COL_YELLOW
-                self.screen.blit(self.f_sm.render(line, True, col), (lx, ly))
-                ly += 22
-                if ly > SCREEN_H - 20:
-                    break
+
+        ly += 6
+        pygame.draw.line(self.screen, COL_BORDER, (lx, ly), (lx + TABLE_W, ly), 1)
+        ly += 8
 
         # 総売上
-        total = win_pool + self.betting_manager.get_quinella_pool_total()
+        win_pool  = self.betting_manager.get_win_pool_total()
+        show_pool = self.betting_manager.get_show_pool_total()
+        total     = win_pool + show_pool
         tot_s = self.f_sm.render(f"総売上: {total:,}円", True, COL_DIM)
         self.screen.blit(tot_s, (lx, SCREEN_H - 28))
 
@@ -874,7 +866,7 @@ class Game:
                               px, py_start)
             py_ = py_start + 30
             for pr in self.payout_results[:6]:
-                type_label = "単勝" if pr.bet_type == "win" else "馬連"
+                type_label = "単勝" if pr.bet_type == "win" else "複勝"
                 line = (f"{pr.display_name[:8]}  "
                         f"{type_label}{pr.horse_label}  "
                         f"{pr.odds:.1f}倍  "
@@ -886,8 +878,8 @@ class Game:
             _draw_text_shadow(self.screen, "払い戻しなし", self.f_md, COL_DIM,
                               px, py_start + 10)
 
-        # ── 単勝・馬連配当表示（中央右上） ───────────────
-        div_rect = pygame.Rect(520, HEADER_H + 10, 340, 180)
+        # ── 単勝・複勝配当表示（中央右上） ───────────────
+        div_rect = pygame.Rect(520, HEADER_H + 10, 340, 210)
         _draw_panel(self.screen, div_rect)
         dx, dy = div_rect.x + 12, div_rect.y + 10
         _draw_text_shadow(self.screen, "配当", self.f_md, COL_YELLOW, dx, dy)
@@ -895,8 +887,9 @@ class Game:
 
         first_num  = self.finish_order[0].number
         second_num = self.finish_order[1].number
+        third_num  = self.finish_order[2].number
         win_odds_map  = self.betting_manager.get_win_odds()
-        quin_odds_map = self.betting_manager.get_quinella_odds()
+        show_odds_map = self.betting_manager.get_show_odds()
 
         # 単勝
         w_odds = win_odds_map.get(first_num)
@@ -907,17 +900,15 @@ class Game:
         )
         dy += 34
 
-        # 馬連
-        from betting import BettingManager
-        qkey = (min(first_num, second_num), max(first_num, second_num))
-        q_odds = quin_odds_map.get(qkey)
-        q_str  = f"{max(1.0, q_odds):.1f}倍" if q_odds else "---"
-        self.screen.blit(
-            self.f_md.render(
-                f"馬連  {qkey[0]}-{qkey[1]}番  {q_str}", True, COL_TEXT
-            ),
-            (dx, dy)
-        )
+        # 複勝（1〜3着それぞれのオッズを表示）
+        for place_num in (first_num, second_num, third_num):
+            s_odds = show_odds_map.get(place_num)
+            s_str  = f"{max(1.0, s_odds):.1f}倍" if s_odds else "---"
+            self.screen.blit(
+                self.f_md.render(f"複勝  {place_num}番  {s_str}", True, COL_TEXT),
+                (dx, dy)
+            )
+            dy += 30
 
         # ── 残高ランキング（右パネル） ────────────────────
         rk_rect = pygame.Rect(520, HEADER_H + 200, 740, 480)
