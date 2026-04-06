@@ -13,3 +13,4 @@ venv/
 token.json
 client_secret.json
 auto_start.bat
+config.bat

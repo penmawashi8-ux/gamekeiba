@@ -1,0 +1,12 @@
+@echo off
+REM ============================================================
+REM config.bat.example - 認証情報設定ファイルのテンプレート
+REM
+REM 使い方:
+REM   1. このファイルを config.bat という名前でコピー
+REM   2. 実際の値を設定して保存
+REM   3. config.bat は git に上がらないので安全
+REM ============================================================
+
+set YOUTUBE_API_KEY=YOUR_YOUTUBE_API_KEY_HERE
+set OBS_PASSWORD=YOUR_OBS_WEBSOCKET_PASSWORD_HERE
