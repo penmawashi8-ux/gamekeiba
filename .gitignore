@@ -10,3 +10,5 @@ build/
 *.db
 venv/
 .venv/
+token.json
+client_secret.json
