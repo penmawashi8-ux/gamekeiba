@@ -126,6 +126,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="配信開始時刻（例: 2025-01-01T18:00:00Z）",
     )
 
+    # APIキー（環境変数の代替）
+    parser.add_argument(
+        "--api-key",
+        default="",
+        metavar="KEY",
+        help="YouTube Data API キー（環境変数 YOUTUBE_API_KEY の代替）",
+    )
+
     # デバッグ
     parser.add_argument(
         "--debug",
@@ -180,11 +188,13 @@ def main() -> int:
         return 1
 
     # ── YouTube APIキー確認（テストモード以外）────────────────────
-    api_key = os.environ.get("YOUTUBE_API_KEY", "")
+    # --api-key 引数 > 環境変数 YOUTUBE_API_KEY の優先順位で取得
+    api_key = args.api_key or os.environ.get("YOUTUBE_API_KEY", "")
     if not args.test and not api_key:
         logger.error(
-            "環境変数 YOUTUBE_API_KEY が設定されていません\n"
-            "  export YOUTUBE_API_KEY='your_api_key'"
+            "YouTube API キーが設定されていません\n"
+            "  auto_start.bat の YOUTUBE_API_KEY を設定するか\n"
+            "  --api-key KEY を引数で渡してください"
         )
         return 1
 
