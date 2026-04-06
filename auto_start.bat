@@ -6,12 +6,13 @@ REM Usage:
 REM   Run manually by double-clicking, or via Task Scheduler at 18:55.
 REM
 REM Steps:
-REM   1. create_broadcast.py creates a YouTube broadcast (unlisted)
-REM   2. Launch game with the VIDEO_ID for 20 races
-REM   3. Auto-stop after 20 races
+REM   1. Start OBS Studio automatically (if not already running)
+REM   2. create_broadcast.py creates a YouTube broadcast (unlisted)
+REM   3. Launch game with the VIDEO_ID for 20 races
+REM   4. Auto-stop after 20 races
 REM
 REM Requirements:
-REM   - Set YOUTUBE_API_KEY below
+REM   - Set YOUTUBE_API_KEY and OBS_PASSWORD below
 REM   - Place client_secret.json in this folder
 REM   See README.md for details.
 REM ============================================================
@@ -20,6 +21,9 @@ REM --- Settings (edit here) ---
 set YOUTUBE_API_KEY=YOUR_YOUTUBE_API_KEY_HERE
 set OBS_PASSWORD=
 set GAME_FONT_PATH=
+
+REM OBS installation path (edit if OBS is installed elsewhere)
+set OBS_EXE=C:\Program Files\obs-studio\bin\64bit\obs64.exe
 
 REM Move to script directory
 cd /d "%~dp0"
@@ -45,6 +49,22 @@ if exist "C:\Windows\Fonts\YuGothM.ttc" (
 :font_found
 if not "%GAME_FONT_PATH%"=="" (
     echo [INFO] Font: %GAME_FONT_PATH%
+)
+
+REM --- Auto-start OBS if not running ---
+tasklist /fi "imagename eq obs64.exe" 2>nul | find /i "obs64.exe" >nul
+if errorlevel 1 (
+    if exist "%OBS_EXE%" (
+        echo [INFO] Starting OBS Studio...
+        start "" "%OBS_EXE%" --minimize-to-tray
+        echo [INFO] Waiting 15 seconds for OBS to load...
+        timeout /t 15 /nobreak >nul
+    ) else (
+        echo [WARN] OBS not found at: %OBS_EXE%
+        echo        Start OBS manually, or update OBS_EXE path in this file.
+    )
+) else (
+    echo [INFO] OBS is already running.
 )
 
 REM --- Setup venv (Python 3.12) ---
