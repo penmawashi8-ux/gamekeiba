@@ -13,11 +13,10 @@ REM
 REM Requirements:
 REM   - Set YOUTUBE_API_KEY below
 REM   - Place client_secret.json in this folder
-REM     (Browser OAuth prompt on first run only)
 REM   See README.md for details.
 REM ============================================================
 
-REM ── Settings (edit here) ───────────────────────────────────
+REM --- Settings (edit here) ---
 set YOUTUBE_API_KEY=YOUR_YOUTUBE_API_KEY_HERE
 set OBS_PASSWORD=
 set GAME_FONT_PATH=
@@ -30,7 +29,7 @@ echo  Virtual Keiba LIVE - Auto Broadcast
 echo  %date% %time%
 echo ========================================
 
-REM ── Auto-detect Japanese font ─────────────────────────────
+REM --- Auto-detect Japanese font ---
 if exist "C:\Windows\Fonts\meiryo.ttc" (
     set GAME_FONT_PATH=C:\Windows\Fonts\meiryo.ttc
     goto :font_found
@@ -48,26 +47,26 @@ if not "%GAME_FONT_PATH%"=="" (
     echo [INFO] Font: %GAME_FONT_PATH%
 )
 
-REM ── Setup venv ────────────────────────────────────────────
+REM --- Setup venv (Python 3.12) ---
 if exist ".venv\Scripts\activate.bat" (
     call .venv\Scripts\activate.bat
 ) else (
-    echo [INFO] Creating venv...
-    python -m venv .venv
+    echo [INFO] Creating venv with Python 3.12...
+    py -3.12 -m venv .venv
     call .venv\Scripts\activate.bat
-    pip install --upgrade pip
-    pip install -r requirements.txt
-    pip install google-auth-oauthlib
+    python -m pip install --upgrade pip
+    python -m pip install -r requirements.txt
+    python -m pip install google-auth-oauthlib
 )
 
 REM Install google-auth-oauthlib if missing
-pip show google-auth-oauthlib >nul 2>&1
+python -m pip show google-auth-oauthlib >nul 2>&1
 if errorlevel 1 (
     echo [INFO] Installing google-auth-oauthlib...
-    pip install google-auth-oauthlib
+    python -m pip install google-auth-oauthlib
 )
 
-REM ── Create YouTube broadcast ──────────────────────────────
+REM --- Create YouTube broadcast ---
 echo [INFO] Creating YouTube broadcast...
 for /f "usebackq delims=" %%i in (`python create_broadcast.py 2^>con`) do set VIDEO_ID=%%i
 
@@ -87,7 +86,7 @@ if "%VIDEO_ID%"=="" (
 
 echo [INFO] VIDEO_ID: %VIDEO_ID%
 
-REM ── Launch game (20 races) ────────────────────────────────
+REM --- Launch game (20 races) ---
 echo.
 echo ========================================
 echo  Starting broadcast

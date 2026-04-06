@@ -1,31 +1,31 @@
 @echo off
 REM ============================================================
-REM YouTube LIVE 競馬ゲーム 起動スクリプト（Windows用）
+REM start.bat - YouTube LIVE Keiba Game (Windows)
 REM ============================================================
-REM 使用前に以下を設定してください:
-REM   1. YOUTUBE_API_KEY を設定
-REM   2. VIDEO_ID を設定（またはコマンドライン引数で渡す）
-REM   3. OBS_PASSWORD を設定（OBSのWebSocketパスワード）
+REM Setup before use:
+REM   1. Set YOUTUBE_API_KEY
+REM   2. Set VIDEO_ID (or pass as argument)
+REM   3. Set OBS_PASSWORD (if using OBS WebSocket)
 REM
-REM タスクスケジューラ登録コマンド（毎日19時に実行）:
-REM   schtasks /create /tn "競馬ゲーム" /tr "C:\path\to\start.bat" /sc daily /st 19:00
+REM Task Scheduler example (run at 19:00 daily):
+REM   schtasks /create /tn "Keiba" /tr "C:\path\to\start.bat" /sc daily /st 19:00
 REM ============================================================
 
-REM ── 設定項目 ──────────────────────────────────────────────
+REM --- Settings ---
 set YOUTUBE_API_KEY=YOUR_YOUTUBE_API_KEY_HERE
 set OBS_PASSWORD=
 set GAME_FONT_PATH=
 
-REM 引数からvideo_idとレース数を受け取る
+REM Accept video_id and race count from arguments
 set VIDEO_ID=%1
 set RACES=%2
 if "%VIDEO_ID%"=="" set VIDEO_ID=YOUR_VIDEO_ID_HERE
 if "%RACES%"=="" set RACES=10
 
-REM スクリプトのディレクトリに移動
+REM Move to script directory
 cd /d "%~dp0"
 
-REM ── 日本語フォント自動検索 ────────────────────────────────
+REM --- Auto-detect Japanese font ---
 if exist "C:\Windows\Fonts\meiryo.ttc" (
     set GAME_FONT_PATH=C:\Windows\Fonts\meiryo.ttc
     goto :font_found
@@ -40,35 +40,35 @@ if exist "C:\Windows\Fonts\YuGothM.ttc" (
 )
 :font_found
 if not "%GAME_FONT_PATH%"=="" (
-    echo [INFO] 日本語フォント: %GAME_FONT_PATH%
+    echo [INFO] Font: %GAME_FONT_PATH%
 )
 
-REM ── 仮想環境の確認・作成 ──────────────────────────────────
+REM --- Setup venv ---
 if exist ".venv\Scripts\activate.bat" (
     call .venv\Scripts\activate.bat
 ) else (
-    echo [INFO] 仮想環境を作成します...
+    echo [INFO] Creating venv...
     python -m venv .venv
     call .venv\Scripts\activate.bat
     pip install --upgrade pip
     pip install -r requirements.txt
 )
 
-REM ── ゲーム起動 ────────────────────────────────────────────
+REM --- Launch game ---
 echo ========================================
-echo  YouTube LIVE 競馬ゲーム
+echo  YouTube LIVE Keiba Game
 echo  video_id : %VIDEO_ID%
 echo  races    : %RACES%
 echo ========================================
 
 if "%VIDEO_ID%"=="YOUR_VIDEO_ID_HERE" (
-    echo [INFO] VIDEO_ID が未設定です。テストモードで起動します。
+    echo [INFO] VIDEO_ID not set. Starting in test mode.
     python main.py --test --races %RACES%
 ) else (
     python main.py %VIDEO_ID% --races %RACES%
 )
 
 echo ========================================
-echo  終了しました
+echo  Done.
 echo ========================================
 pause
