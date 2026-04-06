@@ -187,20 +187,24 @@ class YouTubeClient:
         self._next_page_token: Optional[str] = None
         self._live_chat_id: Optional[str] = None
         self._poll_interval: float = self.POLL_INTERVAL  # APIの推奨待機時間で上書きされる
+        self.status: str = "初期化中"  # ゲーム画面に表示するステータス文字列
 
         # googleapiclient の遅延インポート
         try:
             from googleapiclient.discovery import build
             self._youtube = build("youtube", "v3", developerKey=api_key)
             logger.info("YouTube API クライアント初期化完了")
+            self.status = "接続待機中"
         except ImportError:
             logger.error("google-api-python-client がインストールされていません")
             self._youtube = None
+            self.status = "ライブラリなし"
 
     def start(self):
         """ポーリングスレッドを開始する"""
         if self._youtube is None:
             logger.error("YouTube API が利用できないためポーリングを開始できません")
+            self.status = "起動失敗"
             return
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._poll_loop, daemon=True,
@@ -282,19 +286,26 @@ class YouTubeClient:
             logger.error("[APIエラー] HTTP %s: %s", status, e)
             if str(status) == "403":
                 logger.error("→ APIキーが無効またはクォータ超過の可能性があります")
+                self.status = "エラー:403"
                 self._poll_interval = 60.0  # エラー時は待機を延ばす
+            else:
+                self.status = f"エラー:{status}"
         except Exception as e:
             logger.error("[APIエラー] %s: %s", type(e).__name__, e)
+            self.status = f"エラー"
 
     def _poll_loop(self):
         """ポーリングループ（バックグラウンドスレッドで実行）"""
         # ライブチャットIDを取得
+        self.status = "チャットID取得中"
         while not self._stop_event.is_set():
             self._live_chat_id = self._get_live_chat_id()
             if self._live_chat_id:
                 break
+            self.status = "チャットID待機中"
             logger.warning("ライブチャットID取得失敗、10秒後にリトライ")
             self._stop_event.wait(10)
+        self.status = "受信中"
 
         # メッセージポーリング
         while not self._stop_event.is_set():

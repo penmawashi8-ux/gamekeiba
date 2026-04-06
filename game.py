@@ -179,6 +179,7 @@ class Game:
         betting_manager: BettingManager,
         num_races: int = 10,
         test_client=None,
+        youtube_client=None,
     ):
         """
         Args:
@@ -187,12 +188,14 @@ class Game:
             betting_manager: 馬券・オッズ管理
             num_races:       消化レース数（達したら終了）
             test_client:     TestClient インスタンス（テストモード時）
+            youtube_client:  YouTubeClient インスタンス（ステータス表示用）
         """
         self.command_queue   = command_queue
         self.user_manager    = user_manager
         self.betting_manager = betting_manager
         self.num_races       = num_races
         self.test_client     = test_client
+        self.youtube_client  = youtube_client
 
         self.race_count  = 0      # 消化レース数
         self.is_running  = True   # False にすると次フレームで終了
@@ -558,6 +561,19 @@ class Game:
             cw = self.f_md.render(cd_text, True, col).get_width()
             _draw_text_shadow(self.screen, cd_text, self.f_md, col,
                               SCREEN_W - cw - 16, 12)
+
+        # YouTube接続ステータス（左下）
+        if self.youtube_client is not None:
+            yt_status = self.youtube_client.status
+            col = COL_GREEN_BR if yt_status == "受信中" else (
+                  COL_RED   if yt_status.startswith("エラー") else COL_ORANGE)
+            self.screen.blit(
+                self.f_xs.render(f"YT:{yt_status}", True, col),
+                (16, HEADER_H - 16))
+        elif self.test_client is not None:
+            self.screen.blit(
+                self.f_xs.render("テストモード", True, COL_DIM),
+                (16, HEADER_H - 16))
 
     # ──────────────────────────────────────────────
     # 描画: 馬券受付フェーズ

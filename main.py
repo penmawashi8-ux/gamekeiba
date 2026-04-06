@@ -267,6 +267,7 @@ def main() -> int:
         betting_manager=betting_manager,
         num_races=args.races,
         test_client=yt_client if args.test else None,
+        youtube_client=yt_client if not args.test else None,
     )
 
     # ── SIGINT ハンドラー（Ctrl+C）────────────────────────────────
