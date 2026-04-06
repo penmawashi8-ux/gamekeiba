@@ -233,9 +233,19 @@ def main() -> int:
     if not args.no_obs:
         connected = obs_ctrl.connect()
         if connected:
-            # ストリームキーが渡された場合は OBS に自動設定
-            if args.stream_server and args.stream_key:
-                obs_ctrl.configure_stream(args.stream_server, args.stream_key)
+            # stream_settings.txt があれば OBS のストリーム設定を自動更新
+            _ss = args.stream_server or ""
+            _sk = args.stream_key or ""
+            if not (_ss and _sk):
+                _settings_file = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                               "stream_settings.txt")
+                if os.path.exists(_settings_file):
+                    with open(_settings_file, encoding="utf-8") as _f:
+                        _lines = _f.read().strip().splitlines()
+                    if len(_lines) >= 2:
+                        _ss, _sk = _lines[0], _lines[1]
+            if _ss and _sk:
+                obs_ctrl.configure_stream(_ss, _sk)
             obs_ctrl.start_stream()
         else:
             logger.warning("OBS に接続できませんでした。OBS制御をスキップします。")

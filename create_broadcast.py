@@ -107,7 +107,8 @@ def get_credentials():
 # 配信枠の作成
 # ──────────────────────────────────────────────────────────────────
 
-STREAM_ID_FILE = os.path.join(_BASE_DIR, "stream_id.txt")
+STREAM_ID_FILE       = os.path.join(_BASE_DIR, "stream_id.txt")
+STREAM_SETTINGS_FILE = os.path.join(_BASE_DIR, "stream_settings.txt")
 
 
 def _get_or_create_stream(youtube) -> dict:
@@ -208,6 +209,11 @@ def create_broadcast(title: str, scheduled_start_time: str) -> tuple:
     ).execute()
     logger.info("ブロードキャストとストリームを紐付けました")
 
+    # RTMPサーバーとストリームキーをファイルに保存（main.py がOBSに設定するため）
+    with open(STREAM_SETTINGS_FILE, "w", encoding="utf-8") as f:
+        f.write(f"{rtmp_server}\n{stream_key}\n")
+    logger.info("ストリーム設定を保存: %s", STREAM_SETTINGS_FILE)
+
     return broadcast_id, rtmp_server, stream_key
 
 
@@ -280,8 +286,9 @@ def main():
         print(f"[INFO] 配信枠を作成しました: https://youtu.be/{video_id}", file=sys.stderr)
         print(f"[INFO] RTMP Server : {rtmp_server}", file=sys.stderr)
         print(f"[INFO] Stream Key  : {stream_key}", file=sys.stderr)
-        # VIDEO_ID|RTMP_SERVER|STREAM_KEY を標準出力（auto_start.bat で取得）
-        print(f"{video_id}|{rtmp_server}|{stream_key}")
+        # VIDEO_ID のみ標準出力（auto_start.bat で取得）
+        # RTMP情報は stream_settings.txt に保存済み（main.py が読み込む）
+        print(video_id)
         sys.exit(0)
     except Exception as e:
         print(f"[ERROR] 配信枠の作成に失敗しました: {e}", file=sys.stderr)
