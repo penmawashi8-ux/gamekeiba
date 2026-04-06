@@ -321,11 +321,13 @@ class Game:
                 self._add_message(f"{cmd.display_name}: 残高 {bal:,}円")
 
             elif cmd.command_type in (CMD_WIN, CMD_SHOW):
-                # 馬券受付フェーズ以外は無視
+                # 馬券受付フェーズ以外はエラー表示
                 if self.phase != Phase.BETTING:
+                    self._add_message(f"{cmd.display_name}: 馬券受付中ではありません")
                     continue
-                # 受付終了後は無視
+                # 受付終了後も同様
                 if self._betting_remaining() <= 0:
+                    self._add_message(f"{cmd.display_name}: 馬券締め切り済みです")
                     continue
                 self._handle_bet(cmd, user)
 

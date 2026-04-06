@@ -168,7 +168,7 @@ class YouTubeClient:
     コマンドを command_queue に投入する。
     """
 
-    POLL_INTERVAL = 3.0   # ポーリング間隔（秒）
+    POLL_INTERVAL = 5.0   # デフォルトポーリング間隔（秒）。APIの pollingIntervalMillis を優先
 
     def __init__(self, video_id: str, api_key: str,
                  command_queue: queue.Queue):
@@ -186,6 +186,7 @@ class YouTubeClient:
         self._thread: Optional[threading.Thread] = None
         self._next_page_token: Optional[str] = None
         self._live_chat_id: Optional[str] = None
+        self._poll_interval: float = self.POLL_INTERVAL  # APIの推奨待機時間で上書きされる
 
         # googleapiclient の遅延インポート
         try:
@@ -249,13 +250,17 @@ class YouTubeClient:
             if self._next_page_token:
                 params["pageToken"] = self._next_page_token
 
-            logger.debug("[ポーリング実行中] live_chat_id=%s pageToken=%s",
-                         self._live_chat_id, self._next_page_token)
             resp = self._youtube.liveChatMessages().list(**params).execute()
             self._next_page_token = resp.get("nextPageToken")
 
+            # APIが推奨する待機時間を取得（クォータ節約）
+            interval_ms = resp.get("pollingIntervalMillis")
+            if interval_ms:
+                self._poll_interval = max(interval_ms / 1000.0, self.POLL_INTERVAL)
+
             items = resp.get("items", [])
-            logger.debug("[コメント取得] %d件", len(items))
+            if items:
+                logger.info("[コメント取得] %d件", len(items))
 
             for item in items:
                 snippet = item.get("snippet", {})
@@ -264,8 +269,7 @@ class YouTubeClient:
                 channel_id   = author.get("channelId", "")
                 display_name = author.get("displayName", "名無し")
 
-                logger.debug("[コメント内容] user=%s channel=%s text=%r",
-                             display_name, channel_id, text)
+                logger.info("[コメント受信] %s: %r", display_name, text)
 
                 cmd = parse_comment(channel_id, display_name, text, time.time())
                 if cmd:
@@ -274,8 +278,11 @@ class YouTubeClient:
                                 display_name, cmd.command_type, text)
 
         except HttpError as e:
-            logger.error("[APIエラー] HttpError: status=%s reason=%s",
-                         e.resp.status if hasattr(e, "resp") else "?", e)
+            status = e.resp.status if hasattr(e, "resp") else "?"
+            logger.error("[APIエラー] HTTP %s: %s", status, e)
+            if str(status) == "403":
+                logger.error("→ APIキーが無効またはクォータ超過の可能性があります")
+                self._poll_interval = 60.0  # エラー時は待機を延ばす
         except Exception as e:
             logger.error("[APIエラー] %s: %s", type(e).__name__, e)
 
@@ -292,7 +299,7 @@ class YouTubeClient:
         # メッセージポーリング
         while not self._stop_event.is_set():
             self._fetch_messages()
-            self._stop_event.wait(self.POLL_INTERVAL)
+            self._stop_event.wait(self._poll_interval)
 
 
 # ──────────────────────────────────────────────────────────────────
