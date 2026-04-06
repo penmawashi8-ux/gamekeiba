@@ -18,6 +18,7 @@ import threading
 import time
 import logging
 import os
+import unicodedata
 from dataclasses import dataclass
 from typing import Optional
 
@@ -67,7 +68,10 @@ def parse_comment(channel_id: str, display_name: str,
     Returns:
         ParsedCommand または None
     """
-    text = text.strip()
+    # 全角→半角正規化（！→!、全角数字→半角、全角スペース→半角スペース）
+    text = unicodedata.normalize("NFKC", text).strip()
+    # 「円」suffix を除去（例: 500円 → 500）
+    text = text.replace("円", "")
 
     # 単勝: !単勝 馬番 金額
     if text.startswith("!単勝"):
