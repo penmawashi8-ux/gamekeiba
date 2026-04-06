@@ -107,17 +107,61 @@ def get_credentials():
 # 配信枠の作成
 # ──────────────────────────────────────────────────────────────────
 
-def create_broadcast(title: str, scheduled_start_time: str) -> str:
+STREAM_ID_FILE = os.path.join(_BASE_DIR, "stream_id.txt")
+
+
+def _get_or_create_stream(youtube) -> dict:
     """
-    YouTube ライブ配信枠（限定公開）を作成して video_id を返す。
+    ライブストリームを取得または新規作成する。
+
+    stream_id.txt が存在すればそのストリームを再利用し、
+    存在しなければ新規作成して stream_id.txt に保存する。
+    ストリームを再利用することでOBSのストリームキーを固定できる。
+
+    Returns:
+        liveStreams リソース dict（cdn.ingestionInfo を含む）
+    """
+    if os.path.exists(STREAM_ID_FILE):
+        with open(STREAM_ID_FILE, "r") as f:
+            stream_id = f.read().strip()
+        if stream_id:
+            resp = youtube.liveStreams().list(
+                part="snippet,cdn", id=stream_id
+            ).execute()
+            if resp.get("items"):
+                logger.info("既存ストリームを再利用: id=%s", stream_id)
+                return resp["items"][0]
+            logger.warning("保存済みストリームID(%s)が見つかりません。新規作成します。", stream_id)
+
+    # 新規作成
+    stream = youtube.liveStreams().insert(
+        part="snippet,cdn",
+        body={
+            "snippet": {"title": "バーチャル競馬LIVE ストリーム"},
+            "cdn": {
+                "frameRate": "30fps",
+                "ingestionType": "rtmp",
+                "resolution": "1080p",
+            },
+        },
+    ).execute()
+
+    with open(STREAM_ID_FILE, "w") as f:
+        f.write(stream["id"])
+    logger.info("新規ストリーム作成・保存: id=%s", stream["id"])
+    return stream
+
+
+def create_broadcast(title: str, scheduled_start_time: str) -> tuple:
+    """
+    YouTube ライブ配信枠（限定公開）を作成する。
 
     Args:
         title:                 配信タイトル
         scheduled_start_time:  ISO 8601 形式の開始時刻
-                               例: "2025-01-01T19:00:00+09:00"
 
     Returns:
-        作成された video_id（文字列）
+        (video_id, rtmp_server, stream_key) のタプル
 
     Raises:
         Exception: 作成に失敗した場合
@@ -137,38 +181,24 @@ def create_broadcast(title: str, scheduled_start_time: str) -> str:
                 "description": (
                     "バーチャル競馬LIVE 自動配信\n\n"
                     "コメントで馬券を購入しよう！\n"
-                    "  !単勝 [馬番] [金額]          例: !単勝 3 500\n"
-                    "  !馬連 [馬番] [馬番] [金額]   例: !馬連 2 5 1000\n"
+                    "  !単勝 [馬番] [金額]   例: !単勝 3 500\n"
+                    "  !複勝 [馬番] [金額]   例: !複勝 3 500\n"
                     "  !残高"
                 ),
             },
-            "status": {
-                "privacyStatus": "unlisted",   # 限定公開
-            },
-            "contentDetails": {
-                "enableAutoStart": True,
-                "enableAutoStop": True,
-            },
+            "status": {"privacyStatus": "unlisted"},
+            "contentDetails": {"enableAutoStart": True, "enableAutoStop": True},
         },
     ).execute()
 
     broadcast_id = broadcast["id"]
     logger.info("ブロードキャスト作成完了: id=%s", broadcast_id)
 
-    # ライブストリーム作成
-    stream = youtube.liveStreams().insert(
-        part="snippet,cdn",
-        body={
-            "snippet": {"title": title},
-            "cdn": {
-                "frameRate": "30fps",
-                "ingestionType": "rtmp",
-                "resolution": "1080p",
-            },
-        },
-    ).execute()
-
-    logger.info("ライブストリーム作成完了: id=%s", stream["id"])
+    # ストリームを取得または作成（OBSのキーを固定）
+    stream = _get_or_create_stream(youtube)
+    ingestion = stream["cdn"]["ingestionInfo"]
+    rtmp_server = ingestion["ingestionAddress"]
+    stream_key  = ingestion["streamName"]
 
     # ブロードキャストとストリームを紐付け
     youtube.liveBroadcasts().bind(
@@ -176,9 +206,9 @@ def create_broadcast(title: str, scheduled_start_time: str) -> str:
         id=broadcast_id,
         streamId=stream["id"],
     ).execute()
-
     logger.info("ブロードキャストとストリームを紐付けました")
-    return broadcast_id
+
+    return broadcast_id, rtmp_server, stream_key
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -246,10 +276,12 @@ def main():
     print(f"[INFO] 開始時刻: {scheduled_start_time}", file=sys.stderr)
 
     try:
-        video_id = create_broadcast(title, scheduled_start_time)
+        video_id, rtmp_server, stream_key = create_broadcast(title, scheduled_start_time)
         print(f"[INFO] 配信枠を作成しました: https://youtu.be/{video_id}", file=sys.stderr)
-        # video_id のみ標準出力に出力（auto_start.bat で取得するため）
-        print(video_id)
+        print(f"[INFO] RTMP Server : {rtmp_server}", file=sys.stderr)
+        print(f"[INFO] Stream Key  : {stream_key}", file=sys.stderr)
+        # VIDEO_ID|RTMP_SERVER|STREAM_KEY を標準出力（auto_start.bat で取得）
+        print(f"{video_id}|{rtmp_server}|{stream_key}")
         sys.exit(0)
     except Exception as e:
         print(f"[ERROR] 配信枠の作成に失敗しました: {e}", file=sys.stderr)

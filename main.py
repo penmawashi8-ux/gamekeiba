@@ -134,6 +134,20 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="YouTube Data API キー（環境変数 YOUTUBE_API_KEY の代替）",
     )
 
+    # OBS ストリーム設定（create_broadcast.py から自動取得）
+    parser.add_argument(
+        "--stream-server",
+        default="",
+        metavar="URL",
+        help="OBS に設定する RTMP サーバー URL",
+    )
+    parser.add_argument(
+        "--stream-key",
+        default="",
+        metavar="KEY",
+        help="OBS に設定する YouTube ストリームキー",
+    )
+
     # デバッグ
     parser.add_argument(
         "--debug",
@@ -219,6 +233,9 @@ def main() -> int:
     if not args.no_obs:
         connected = obs_ctrl.connect()
         if connected:
+            # ストリームキーが渡された場合は OBS に自動設定
+            if args.stream_server and args.stream_key:
+                obs_ctrl.configure_stream(args.stream_server, args.stream_key)
             obs_ctrl.start_stream()
         else:
             logger.warning("OBS に接続できませんでした。OBS制御をスキップします。")

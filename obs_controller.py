@@ -106,6 +106,35 @@ class OBSController:
     # 配信制御
     # ──────────────────────────────────────────────
 
+    def configure_stream(self, rtmp_server: str, stream_key: str) -> bool:
+        """
+        OBS のストリーム配信先（YouTubeのRTMPサーバーとストリームキー）を設定する。
+
+        Args:
+            rtmp_server: RTMP サーバーURL（例: rtmp://a.rtmp.youtube.com/live2）
+            stream_key:  YouTube ストリームキー
+
+        Returns:
+            True: 設定成功（またはダミーモード）
+        """
+        if self._dummy_mode:
+            logger.info("[OBS ダミーモード] configure_stream() 呼び出し")
+            return True
+
+        try:
+            self._client.set_stream_service_settings(
+                stream_service_type="rtmp_custom",
+                stream_service_settings={
+                    "server": rtmp_server,
+                    "key": stream_key,
+                },
+            )
+            logger.info("OBS ストリーム設定完了: server=%s", rtmp_server)
+            return True
+        except Exception as e:
+            logger.error("OBS ストリーム設定エラー: %s", e)
+            return False
+
     def start_stream(self) -> bool:
         """
         OBS の配信を開始する。
