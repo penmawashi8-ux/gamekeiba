@@ -1,38 +1,36 @@
 @echo off
-chcp 65001 >nul
 REM ============================================================
-REM バーチャル競馬LIVE 毎日19時 全自動配信スクリプト
+REM auto_start.bat - Virtual Keiba LIVE auto broadcast
 REM ============================================================
-REM 【使い方】
-REM   タスクスケジューラから毎日18:55に自動実行されます。
-REM   手動で実行する場合はダブルクリックするだけでOKです。
+REM Usage:
+REM   Run manually by double-clicking, or via Task Scheduler at 18:55.
 REM
-REM 【処理の流れ】
-REM   1. create_broadcast.py でYouTube配信枠を自動作成（限定公開）
-REM   2. 取得したVIDEO_IDでゲームを起動
-REM   3. 20レース終了後に自動終了・配信停止
+REM Steps:
+REM   1. create_broadcast.py creates a YouTube broadcast (unlisted)
+REM   2. Launch game with the VIDEO_ID for 20 races
+REM   3. Auto-stop after 20 races
 REM
-REM 【事前準備】
-REM   1. YOUTUBE_API_KEY を下記に設定してください
-REM   2. client_secret.json をこのフォルダに配置してください
-REM      （初回のみブラウザでOAuth認証が開きます）
-REM   詳細は README.md の「OAuth2の設定手順」を参照してください
+REM Requirements:
+REM   - Set YOUTUBE_API_KEY below
+REM   - Place client_secret.json in this folder
+REM     (Browser OAuth prompt on first run only)
+REM   See README.md for details.
 REM ============================================================
 
-REM ── 設定項目（ここを編集してください）────────────────────
+REM ── Settings (edit here) ───────────────────────────────────
 set YOUTUBE_API_KEY=YOUR_YOUTUBE_API_KEY_HERE
 set OBS_PASSWORD=
 set GAME_FONT_PATH=
 
-REM スクリプトのディレクトリに移動
+REM Move to script directory
 cd /d "%~dp0"
 
 echo ========================================
-echo  バーチャル競馬LIVE 自動配信スクリプト
+echo  Virtual Keiba LIVE - Auto Broadcast
 echo  %date% %time%
 echo ========================================
 
-REM ── 日本語フォント自動検索 ────────────────────────────────
+REM ── Auto-detect Japanese font ─────────────────────────────
 if exist "C:\Windows\Fonts\meiryo.ttc" (
     set GAME_FONT_PATH=C:\Windows\Fonts\meiryo.ttc
     goto :font_found
@@ -47,14 +45,14 @@ if exist "C:\Windows\Fonts\YuGothM.ttc" (
 )
 :font_found
 if not "%GAME_FONT_PATH%"=="" (
-    echo [INFO] 日本語フォント: %GAME_FONT_PATH%
+    echo [INFO] Font: %GAME_FONT_PATH%
 )
 
-REM ── 仮想環境の確認・作成 ──────────────────────────────────
+REM ── Setup venv ────────────────────────────────────────────
 if exist ".venv\Scripts\activate.bat" (
     call .venv\Scripts\activate.bat
 ) else (
-    echo [INFO] 仮想環境を作成します...
+    echo [INFO] Creating venv...
     python -m venv .venv
     call .venv\Scripts\activate.bat
     pip install --upgrade pip
@@ -62,40 +60,39 @@ if exist ".venv\Scripts\activate.bat" (
     pip install google-auth-oauthlib
 )
 
-REM google-auth-oauthlib が未インストールの場合に追加インストール
+REM Install google-auth-oauthlib if missing
 pip show google-auth-oauthlib >nul 2>&1
 if errorlevel 1 (
-    echo [INFO] google-auth-oauthlib をインストールします...
+    echo [INFO] Installing google-auth-oauthlib...
     pip install google-auth-oauthlib
 )
 
-REM ── YouTube配信枠を自動作成 ────────────────────────────────
-echo [INFO] YouTube配信枠を作成しています...
+REM ── Create YouTube broadcast ──────────────────────────────
+echo [INFO] Creating YouTube broadcast...
 for /f "usebackq delims=" %%i in (`python create_broadcast.py 2^>con`) do set VIDEO_ID=%%i
 
 if "%VIDEO_ID%"=="" (
     echo.
-    echo [ERROR] 配信枠の作成に失敗しました。
+    echo [ERROR] Failed to create broadcast.
     echo.
-    echo 確認事項:
-    echo   1. client_secret.json がこのフォルダにあるか確認
-    echo   2. YOUTUBE_API_KEY が正しく設定されているか確認
-    echo   3. インターネット接続を確認
-    echo   4. python create_broadcast.py を手動実行してエラーを確認
+    echo Checklist:
+    echo   1. client_secret.json exists in this folder
+    echo   2. YOUTUBE_API_KEY is set correctly
+    echo   3. Internet connection is available
+    echo   4. Run "python create_broadcast.py" manually for details
     echo.
     pause
     exit /b 1
 )
 
-echo [INFO] VIDEO_ID の取得に成功: %VIDEO_ID%
+echo [INFO] VIDEO_ID: %VIDEO_ID%
 
-REM ── ゲーム起動（20レース固定）────────────────────────────
+REM ── Launch game (20 races) ────────────────────────────────
 echo.
 echo ========================================
-echo  配信開始
-echo  タイトル : バーチャル競馬LIVE
+echo  Starting broadcast
 echo  VIDEO_ID : %VIDEO_ID%
-echo  レース数 : 20
+echo  Races    : 20
 echo ========================================
 echo.
 
@@ -103,6 +100,6 @@ python main.py %VIDEO_ID% --races 20
 
 echo.
 echo ========================================
-echo  配信終了しました (%date% %time%)
+echo  Broadcast ended. (%date% %time%)
 echo ========================================
 pause
