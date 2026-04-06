@@ -187,16 +187,49 @@ def create_broadcast(title: str, scheduled_start_time: str) -> str:
 
 def main():
     """メイン処理"""
-    # 日本時間（JST = UTC+9）で当日19時の開始時刻を生成
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="YouTube ライブ配信枠を自動作成します。",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "例:\n"
+            "  py -3.12 create_broadcast.py                              # 当日19時で作成\n"
+            "  py -3.12 create_broadcast.py --start 2026-04-06T21:00:00+09:00\n"
+        ),
+    )
+    parser.add_argument(
+        "--start",
+        metavar="DATETIME",
+        help="配信開始時刻（ISO 8601形式）。例: 2026-04-06T21:00:00+09:00。省略時は当日19時(JST)。",
+    )
+    args = parser.parse_args()
+
     JST = timezone(timedelta(hours=9))
-    now = datetime.now(JST)
-    today_19 = now.replace(hour=19, minute=0, second=0, microsecond=0)
+
+    if args.start:
+        # --start 引数をパース
+        try:
+            start_dt = datetime.fromisoformat(args.start)
+            # タイムゾーン未指定の場合はJSTとして扱う
+            if start_dt.tzinfo is None:
+                start_dt = start_dt.replace(tzinfo=JST)
+        except ValueError:
+            print(
+                f"[ERROR] --start の形式が不正です: {args.start!r}\n"
+                "ISO 8601 形式で指定してください。例: 2026-04-06T21:00:00+09:00",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    else:
+        # デフォルト: 当日19時(JST)
+        start_dt = datetime.now(JST).replace(hour=19, minute=0, second=0, microsecond=0)
 
     # 配信タイトル（例: 「【毎日19時】バーチャル競馬LIVE 4月6日」）
-    title = f"【毎日19時】バーチャル競馬LIVE {today_19.month}月{today_19.day}日"
+    title = f"【毎日19時】バーチャル競馬LIVE {start_dt.month}月{start_dt.day}日"
 
     # ISO 8601 形式（例: "2025-04-06T19:00:00+09:00"）
-    scheduled_start_time = today_19.isoformat()
+    scheduled_start_time = start_dt.isoformat()
 
     print(f"[INFO] 配信タイトル: {title}", file=sys.stderr)
     print(f"[INFO] 開始時刻: {scheduled_start_time}", file=sys.stderr)
