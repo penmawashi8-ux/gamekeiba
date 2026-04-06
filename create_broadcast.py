@@ -225,6 +225,17 @@ def main():
         # デフォルト: 当日19時(JST)
         start_dt = datetime.now(JST).replace(hour=19, minute=0, second=0, microsecond=0)
 
+    # 開始時刻が過去または5分以内の場合は「今から5分後」に自動調整
+    now = datetime.now(JST)
+    if start_dt <= now + timedelta(minutes=5):
+        adjusted = now + timedelta(minutes=5)
+        print(
+            f"[INFO] 指定時刻({start_dt.strftime('%H:%M')})が過去または直近のため、"
+            f"{adjusted.strftime('%H:%M')} に自動調整します。",
+            file=sys.stderr,
+        )
+        start_dt = adjusted
+
     # 配信タイトル（例: 「【毎日19時】バーチャル競馬LIVE 4月6日」）
     title = f"【毎日19時】バーチャル競馬LIVE {start_dt.month}月{start_dt.day}日"
 
