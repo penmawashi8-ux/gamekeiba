@@ -192,13 +192,29 @@ class YouTubeClient:
         # googleapiclient の遅延インポート
         try:
             from googleapiclient.discovery import build
-            self._youtube = build("youtube", "v3", developerKey=api_key)
-            logger.info("YouTube API クライアント初期化完了")
+            # token.json があれば OAuth 認証を使う
+            # (限定公開配信のライブチャットは API キーでは取得できない場合がある)
+            _token_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "token.json")
+            if os.path.exists(_token_file):
+                from google.oauth2.credentials import Credentials
+                from google.auth.transport.requests import Request
+                creds = Credentials.from_authorized_user_file(_token_file)
+                if creds.expired and creds.refresh_token:
+                    creds.refresh(Request())
+                self._youtube = build("youtube", "v3", credentials=creds)
+                logger.info("YouTube APIクライアント初期化完了 (OAuth)")
+            else:
+                self._youtube = build("youtube", "v3", developerKey=api_key)
+                logger.info("YouTube APIクライアント初期化完了 (APIキー)")
             self.status = "接続待機中"
         except ImportError:
             logger.error("google-api-python-client がインストールされていません")
             self._youtube = None
             self.status = "ライブラリなし"
+        except Exception as e:
+            logger.error("YouTube APIクライアント初期化エラー: %s", e)
+            self._youtube = None
+            self.status = "初期化失敗"
 
     def start(self):
         """ポーリングスレッドを開始する"""
