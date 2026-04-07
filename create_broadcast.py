@@ -19,6 +19,7 @@ import json
 import os
 import sys
 import logging
+import time
 from datetime import datetime, timezone, timedelta
 
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
@@ -110,6 +111,46 @@ def get_credentials():
 STREAM_ID_FILE       = os.path.join(_BASE_DIR, "stream_id.txt")
 STREAM_SETTINGS_FILE = os.path.join(_BASE_DIR, "stream_settings.txt")
 
+# レートリミット時のリトライ設定
+_RATE_LIMIT_MAX_RETRIES = 3
+_RATE_LIMIT_INITIAL_WAIT = 30  # 秒
+
+
+def _execute_with_retry(request, operation_name: str = "API呼び出し") -> dict:
+    """
+    Google API リクエストをレートリミットエラー時に指数バックオフでリトライして実行する。
+
+    Args:
+        request:        .execute() メソッドを持つ API リクエストオブジェクト
+        operation_name: ログ用の操作名
+
+    Returns:
+        API レスポンス dict
+
+    Raises:
+        HttpError: リトライ上限に達した場合、または非リトライエラーの場合
+    """
+    from googleapiclient.errors import HttpError
+
+    wait = _RATE_LIMIT_INITIAL_WAIT
+    for attempt in range(_RATE_LIMIT_MAX_RETRIES + 1):
+        try:
+            return request.execute()
+        except HttpError as e:
+            status = int(e.resp.status) if hasattr(e, "resp") else 0
+            is_rate_limit = status == 403 and "userRequestsExceedRateLimit" in str(e)
+            if is_rate_limit and attempt < _RATE_LIMIT_MAX_RETRIES:
+                print(
+                    f"[WARN] {operation_name}: レートリミット到達。"
+                    f"{wait}秒後にリトライします... "
+                    f"({attempt + 1}/{_RATE_LIMIT_MAX_RETRIES})",
+                    file=sys.stderr,
+                )
+                time.sleep(wait)
+                wait *= 2  # 指数バックオフ: 30s → 60s → 120s
+            else:
+                raise
+
 
 def _get_or_create_stream(youtube) -> dict:
     """
@@ -126,26 +167,30 @@ def _get_or_create_stream(youtube) -> dict:
         with open(STREAM_ID_FILE, "r") as f:
             stream_id = f.read().strip()
         if stream_id:
-            resp = youtube.liveStreams().list(
-                part="snippet,cdn", id=stream_id
-            ).execute()
+            resp = _execute_with_retry(
+                youtube.liveStreams().list(part="snippet,cdn", id=stream_id),
+                "liveStreams.list",
+            )
             if resp.get("items"):
                 logger.info("既存ストリームを再利用: id=%s", stream_id)
                 return resp["items"][0]
             logger.warning("保存済みストリームID(%s)が見つかりません。新規作成します。", stream_id)
 
     # 新規作成
-    stream = youtube.liveStreams().insert(
-        part="snippet,cdn",
-        body={
-            "snippet": {"title": "バーチャル競馬LIVE ストリーム"},
-            "cdn": {
-                "frameRate": "30fps",
-                "ingestionType": "rtmp",
-                "resolution": "1080p",
+    stream = _execute_with_retry(
+        youtube.liveStreams().insert(
+            part="snippet,cdn",
+            body={
+                "snippet": {"title": "バーチャル競馬LIVE ストリーム"},
+                "cdn": {
+                    "frameRate": "30fps",
+                    "ingestionType": "rtmp",
+                    "resolution": "1080p",
+                },
             },
-        },
-    ).execute()
+        ),
+        "liveStreams.insert",
+    )
 
     with open(STREAM_ID_FILE, "w") as f:
         f.write(stream["id"])
@@ -173,24 +218,27 @@ def create_broadcast(title: str, scheduled_start_time: str) -> tuple:
     youtube = build("youtube", "v3", credentials=creds)
 
     # ブロードキャスト作成（限定公開）
-    broadcast = youtube.liveBroadcasts().insert(
-        part="snippet,status,contentDetails",
-        body={
-            "snippet": {
-                "title": title,
-                "scheduledStartTime": scheduled_start_time,
-                "description": (
-                    "バーチャル競馬LIVE 自動配信\n\n"
-                    "コメントで馬券を購入しよう！\n"
-                    "  !単勝 [馬番] [金額]   例: !単勝 3 500\n"
-                    "  !複勝 [馬番] [金額]   例: !複勝 3 500\n"
-                    "  !残高"
-                ),
+    broadcast = _execute_with_retry(
+        youtube.liveBroadcasts().insert(
+            part="snippet,status,contentDetails",
+            body={
+                "snippet": {
+                    "title": title,
+                    "scheduledStartTime": scheduled_start_time,
+                    "description": (
+                        "バーチャル競馬LIVE 自動配信\n\n"
+                        "コメントで馬券を購入しよう！\n"
+                        "  !単勝 [馬番] [金額]   例: !単勝 3 500\n"
+                        "  !複勝 [馬番] [金額]   例: !複勝 3 500\n"
+                        "  !残高"
+                    ),
+                },
+                "status": {"privacyStatus": "unlisted"},
+                "contentDetails": {"enableAutoStart": True, "enableAutoStop": True},
             },
-            "status": {"privacyStatus": "unlisted"},
-            "contentDetails": {"enableAutoStart": True, "enableAutoStop": True},
-        },
-    ).execute()
+        ),
+        "liveBroadcasts.insert",
+    )
 
     broadcast_id = broadcast["id"]
     logger.info("ブロードキャスト作成完了: id=%s", broadcast_id)
@@ -202,11 +250,14 @@ def create_broadcast(title: str, scheduled_start_time: str) -> tuple:
     stream_key  = ingestion["streamName"]
 
     # ブロードキャストとストリームを紐付け
-    youtube.liveBroadcasts().bind(
-        part="id,contentDetails",
-        id=broadcast_id,
-        streamId=stream["id"],
-    ).execute()
+    _execute_with_retry(
+        youtube.liveBroadcasts().bind(
+            part="id,contentDetails",
+            id=broadcast_id,
+            streamId=stream["id"],
+        ),
+        "liveBroadcasts.bind",
+    )
     logger.info("ブロードキャストとストリームを紐付けました")
 
     # RTMPサーバーとストリームキーをファイルに保存（main.py がOBSに設定するため）
