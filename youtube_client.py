@@ -292,7 +292,9 @@ class YouTubeClient:
                 author  = item.get("authorDetails", {})
                 text         = snippet.get("displayMessage", "")
                 channel_id   = author.get("channelId", "")
-                display_name = author.get("displayName", "名無し")
+                # displayName = チャンネル表示名。@ で始まるハンドル形式の場合は @ を除去
+                raw_name     = author.get("displayName", "名無し")
+                display_name = raw_name.lstrip("@") if raw_name.startswith("@") else raw_name
 
                 logger.info("[コメント受信] %s: %r", display_name, text)
 
