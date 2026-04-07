@@ -168,7 +168,7 @@ class YouTubeClient:
     コマンドを command_queue に投入する。
     """
 
-    POLL_INTERVAL = 5.0   # デフォルトポーリング間隔（秒）。APIの pollingIntervalMillis を優先
+    POLL_INTERVAL = 1.5   # デフォルトポーリング間隔（秒）。遅延最小化のため短めに設定
 
     def __init__(self, video_id: str, api_key: str,
                  command_queue: queue.Queue):
@@ -276,7 +276,9 @@ class YouTubeClient:
             # APIが推奨する待機時間を取得（最大10秒にキャップ）
             interval_ms = resp.get("pollingIntervalMillis")
             if interval_ms:
-                new_interval = min(interval_ms / 1000.0, 10.0)
+                # 遅延最小化: API推奨値を採用するが最大2秒にキャップ（通常は5〜10秒を無視）
+                new_interval = min(interval_ms / 1000.0, 2.0)
+                new_interval = max(new_interval, 1.0)  # 最小1秒（API負荷対策）
                 if new_interval != self._poll_interval:
                     logger.info("ポーリング間隔: %.1f秒 (API推奨: %dms)", new_interval, interval_ms)
                     self._poll_interval = new_interval

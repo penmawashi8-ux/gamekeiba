@@ -116,7 +116,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--title",
-        default="YouTube競馬ゲーム LIVE",
+        default="【コメント参加型】バーチャル競馬LIVE",
         help="配信タイトル（--create-broadcast と組み合わせて使用）",
     )
     parser.add_argument(
@@ -146,6 +146,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default="",
         metavar="KEY",
         help="OBS に設定する YouTube ストリームキー",
+    )
+
+    # 縦型モード
+    parser.add_argument(
+        "--vertical",
+        action="store_true",
+        help="縦型配信モード（720×1280）で起動する",
     )
 
     # デバッグ
@@ -268,6 +275,7 @@ def main() -> int:
         num_races=args.races,
         test_client=yt_client if args.test else None,
         youtube_client=yt_client if not args.test else None,
+        vertical=args.vertical,
     )
 
     # ── SIGINT ハンドラー（Ctrl+C）────────────────────────────────

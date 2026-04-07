@@ -154,11 +154,13 @@ class Horse:
                 return max(0.92, 1.12 - (progress - 0.5) * 0.40)
 
         elif s == "差し":
-            # 前半抑えて直線で加速
-            if progress < 0.55:
-                return 0.93
+            # 前半はぐっと抑え、後半豪快に差す（最大1.52倍）
+            if progress < 0.60:
+                return 0.80                                      # 前半: かなり抑える
+            elif progress < 0.70:
+                return 0.80 + (progress - 0.60) * 1.40          # 0.80→0.94 加速準備
             else:
-                return 0.93 + (progress - 0.55) * 0.70   # 最大1.24
+                return 0.94 + (progress - 0.70) * 1.90          # 最大1.51 豪快な差し！
 
         else:  # 追い込み
             # 後半3割だけ猛加速
@@ -231,8 +233,32 @@ def draw_horse(
     sy = int(screen_y)
     col = horse.color
 
+    # ── 差し馬の加速エフェクト（後半60%以降）──────────────
+    if horse.running_style == "差し" and TRACK_LENGTH > 0:
+        progress = min(1.0, horse.x / TRACK_LENGTH)
+        if progress > 0.60:
+            intensity = min(1.0, (progress - 0.60) / 0.40)
+            # 後ろに伸びる緑の速度ライン（3本）
+            line_len = int(40 + intensity * 100)
+            alpha = int(80 + intensity * 120)
+            for li, offset_y in enumerate((-10, 0, 10)):
+                lc = (min(255, alpha), min(255, 180 + int(75 * intensity)), min(255, alpha))
+                pygame.draw.line(
+                    surface, lc,
+                    (sx - 32 - line_len + li * 8, sy + offset_y),
+                    (sx - 32 + li * 4, sy + offset_y),
+                    max(1, int(2 + intensity * 2))
+                )
+            # 馬体を明るいグリーンでハイライト（オーバーレイ）
+            glow_col = (
+                min(255, col[0] + int(60 * intensity)),
+                min(255, col[1] + int(80 * intensity)),
+                min(255, col[2] + int(40 * intensity)),
+            )
+            col = glow_col
+
     # アウトライン色: 白・黄系は濃いグレー、黒系は中グレー、それ以外は暗色
-    brightness = sum(col) // 3
+    brightness = sum(horse.color) // 3
     if brightness > 200:
         dark = (80, 80, 80)       # 白・黄系
     elif brightness < 60:

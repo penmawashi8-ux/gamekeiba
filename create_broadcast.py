@@ -197,7 +197,11 @@ def _do_create_broadcast(youtube, title: str, scheduled_start_time: str) -> tupl
                 ),
             },
             "status": {"privacyStatus": "unlisted"},
-            "contentDetails": {"enableAutoStart": True, "enableAutoStop": True},
+            "contentDetails": {
+                "enableAutoStart": True,
+                "enableAutoStop": True,
+                "enableDvr": False,          # 巻き戻し禁止（リアルタイムのみ）
+            },
         },
     ).execute()
 
@@ -344,7 +348,7 @@ def main():
         )
         start_dt = adjusted
 
-    title = f"【毎日19時】バーチャル競馬LIVE {start_dt.month}月{start_dt.day}日"
+    title = f"【コメント参加型】バーチャル競馬LIVE {start_dt.month}月{start_dt.day}日"
     scheduled_start_time = start_dt.isoformat()
 
     print(f"[INFO] 配信タイトル: {title}", file=sys.stderr)
