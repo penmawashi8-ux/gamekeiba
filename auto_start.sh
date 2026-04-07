@@ -63,17 +63,21 @@ if [ "${YOUTUBE_API_KEY}" = "YOUR_YOUTUBE_API_KEY_HERE" ]; then
     exit 1
 fi
 
+# ── 配信開始時刻の決定 ──────────────────────────────────────
+# START_TIME が空のとき → Python で「今から1分後」を自動計算（何時でも即起動OK）
+# START_TIME を指定するとその時刻で配信枠を作成（例: 2026-04-10T19:00:00+09:00）
+if [ -z "${START_TIME}" ]; then
+    START_TIME=$("${PYTHON}" -c "from datetime import datetime,timedelta,timezone; t=datetime.now(timezone(timedelta(hours=9)))+timedelta(minutes=1); print(t.strftime('%Y-%m-%dT%H:%M:%S+09:00'))")
+    echo "[INFO] 開始時刻を自動設定: ${START_TIME}"
+fi
+
 echo "========================================"
 echo " YouTube LIVE 競馬ゲーム 全自動起動"
 echo " 配信枠を作成中..."
 echo "========================================"
 
 # ── 配信枠作成 ───────────────────────────────────────────────
-if [ -z "${START_TIME}" ]; then
-    VIDEO_ID=$("${PYTHON}" create_broadcast.py 2>/dev/null)
-else
-    VIDEO_ID=$("${PYTHON}" create_broadcast.py --start "${START_TIME}" 2>/dev/null)
-fi
+VIDEO_ID=$("${PYTHON}" create_broadcast.py --start "${START_TIME}" 2>/dev/null)
 
 if [ -z "${VIDEO_ID}" ]; then
     echo "[ERROR] 配信枠の作成に失敗しました。"

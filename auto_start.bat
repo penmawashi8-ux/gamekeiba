@@ -49,18 +49,21 @@ if "%YOUTUBE_API_KEY%"=="YOUR_YOUTUBE_API_KEY_HERE" (
     pause & exit /b 1
 )
 
+REM ── 配信開始時刻の決定 ──────────────────────────────────────
+REM START_TIME が空のとき → Python で「今から1分後」を自動計算（何時でも即起動OK）
+REM START_TIME を指定するとその時刻で配信枠を作成（例: 2026-04-10T19:00:00+09:00）
+if "%START_TIME%"=="" (
+    for /f "delims=" %%t in ('python -c "from datetime import datetime,timedelta,timezone; t=datetime.now(timezone(timedelta(hours=9)))+timedelta(minutes=1); print(t.strftime(\"%%Y-%%m-%%dT%%H:%%M:%%S+09:00\"))"') do set START_TIME=%%t
+    echo [INFO] 開始時刻を自動設定: %START_TIME%
+)
+
 echo ========================================
 echo  YouTube LIVE 競馬ゲーム 全自動起動
 echo  配信枠を作成中...
 echo ========================================
 
 REM ── 配信枠作成 ───────────────────────────────────────────────
-REM START_TIME が空なら create_broadcast.py が自動設定（今から1分後）
-if "%START_TIME%"=="" (
-    for /f "delims=" %%i in ('python create_broadcast.py 2^>nul') do set VIDEO_ID=%%i
-) else (
-    for /f "delims=" %%i in ('python create_broadcast.py --start "%START_TIME%" 2^>nul') do set VIDEO_ID=%%i
-)
+for /f "delims=" %%i in ('python create_broadcast.py --start "%START_TIME%" 2^>nul') do set VIDEO_ID=%%i
 
 if "%VIDEO_ID%"=="" (
     echo [ERROR] 配信枠の作成に失敗しました。

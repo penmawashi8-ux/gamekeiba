@@ -37,16 +37,17 @@ if "%YOUTUBE_API_KEY%"=="YOUR_YOUTUBE_API_KEY_HERE" (
     pause & exit /b 1
 )
 
+if "%START_TIME%"=="" (
+    for /f "delims=" %%t in ('python -c "from datetime import datetime,timedelta,timezone; t=datetime.now(timezone(timedelta(hours=9)))+timedelta(minutes=1); print(t.strftime(\"%%Y-%%m-%%dT%%H:%%M:%%S+09:00\"))"') do set START_TIME=%%t
+    echo [INFO] 開始時刻を自動設定: %START_TIME%
+)
+
 echo ========================================
 echo  YouTube LIVE 競馬ゲーム 縦型全自動起動
 echo  配信枠を作成中...
 echo ========================================
 
-if "%START_TIME%"=="" (
-    for /f "delims=" %%i in ('python create_broadcast.py 2^>nul') do set VIDEO_ID=%%i
-) else (
-    for /f "delims=" %%i in ('python create_broadcast.py --start "%START_TIME%" 2^>nul') do set VIDEO_ID=%%i
-)
+for /f "delims=" %%i in ('python create_broadcast.py --start "%START_TIME%" 2^>nul') do set VIDEO_ID=%%i
 
 if "%VIDEO_ID%"=="" (
     echo [ERROR] 配信枠の作成に失敗しました。

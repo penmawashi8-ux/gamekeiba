@@ -41,16 +41,17 @@ if [ "${YOUTUBE_API_KEY}" = "YOUR_YOUTUBE_API_KEY_HERE" ]; then
     exit 1
 fi
 
+if [ -z "${START_TIME}" ]; then
+    START_TIME=$("${PYTHON}" -c "from datetime import datetime,timedelta,timezone; t=datetime.now(timezone(timedelta(hours=9)))+timedelta(minutes=1); print(t.strftime('%Y-%m-%dT%H:%M:%S+09:00'))")
+    echo "[INFO] 開始時刻を自動設定: ${START_TIME}"
+fi
+
 echo "========================================"
 echo " YouTube LIVE 競馬ゲーム 縦型全自動起動"
 echo " 配信枠を作成中..."
 echo "========================================"
 
-if [ -z "${START_TIME}" ]; then
-    VIDEO_ID=$("${PYTHON}" create_broadcast.py 2>/dev/null)
-else
-    VIDEO_ID=$("${PYTHON}" create_broadcast.py --start "${START_TIME}" 2>/dev/null)
-fi
+VIDEO_ID=$("${PYTHON}" create_broadcast.py --start "${START_TIME}" 2>/dev/null)
 
 [ -z "${VIDEO_ID}" ] && echo "[ERROR] 配信枠の作成に失敗しました。" && exit 1
 
