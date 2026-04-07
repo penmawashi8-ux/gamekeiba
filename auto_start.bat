@@ -1,7 +1,15 @@
 @echo off
 REM ============================================================
 REM auto_start.bat - YouTube LIVE Keiba Game Auto Launcher
-REM Edit YOUTUBE_API_KEY before running.
+REM
+REM [Required] Set YOUTUBE_API_KEY below before running.
+REM
+REM [Python version]
+REM   pygame requires Python 3.9-3.12.
+REM   If you have Python 3.14, install 3.12 from:
+REM     https://www.python.org/downloads/release/python-3128/
+REM   Then change the PYTHON line below to:
+REM     set PYTHON=py -3.12
 REM ============================================================
 
 REM --- User Settings ---
@@ -11,15 +19,31 @@ set GAME_FONT_PATH=
 set RACES=10
 set START_TIME=
 
+REM --- Python executable (change to "py -3.12" if needed) ---
+set PYTHON=python
+
 REM --- Move to script folder ---
 cd /d "%~dp0"
 echo [INFO] Working folder: %CD%
 
 REM --- Check Python ---
-python --version
+%PYTHON% --version
 if errorlevel 1 (
-    echo [ERROR] Python not found. Install from https://www.python.org/
+    echo [ERROR] Python not found.
+    echo   Install Python 3.12 from https://www.python.org/downloads/release/python-3128/
     goto :error
+)
+
+REM --- Warn if Python 3.13+ (pygame may not have wheels) ---
+%PYTHON% -c "import sys; exit(0 if sys.version_info < (3,13) else 1)" >nul 2>&1
+if errorlevel 1 (
+    echo.
+    echo [WARN] Python 3.13 or newer detected.
+    echo   pygame may not install correctly on this version.
+    echo   If install fails, install Python 3.12 and set:
+    echo     set PYTHON=py -3.12
+    echo   in this file, then re-run.
+    echo.
 )
 
 REM --- Auto-detect Japanese font ---
@@ -30,9 +54,13 @@ echo [INFO] Font: %GAME_FONT_PATH%
 
 REM --- Install requirements ---
 echo [INFO] Checking packages...
-python -m pip install -r requirements.txt -q
+%PYTHON% -m pip install -r requirements.txt -q
 if errorlevel 1 (
+    echo.
     echo [ERROR] pip install failed.
+    echo   If the error mentions pygame, install Python 3.12 and set:
+    echo     set PYTHON=py -3.12
+    echo   in this file, then re-run.
     goto :error
 )
 echo [INFO] Packages OK
@@ -45,7 +73,7 @@ if "%YOUTUBE_API_KEY%"=="YOUR_YOUTUBE_API_KEY_HERE" (
 
 REM --- Determine start time ---
 if "%START_TIME%"=="" (
-    python calc_start_time.py
+    %PYTHON% calc_start_time.py
     if errorlevel 1 ( echo [ERROR] Time calc failed. & goto :error )
     set /p START_TIME=<_tmp_st.txt
     del _tmp_st.txt 2>nul
@@ -57,7 +85,7 @@ echo ========================================
 echo  Creating YouTube broadcast...
 echo ========================================
 
-for /f "delims=" %%i in ('python create_broadcast.py --start "%START_TIME%"') do set VIDEO_ID=%%i
+for /f "delims=" %%i in ('%PYTHON% create_broadcast.py --start "%START_TIME%"') do set VIDEO_ID=%%i
 
 if "%VIDEO_ID%"=="" (
     echo [ERROR] Broadcast creation failed.
@@ -70,7 +98,7 @@ echo [INFO] video_id: %VIDEO_ID%
 echo [INFO] URL: https://youtu.be/%VIDEO_ID%
 echo.
 
-python main.py %VIDEO_ID% --races %RACES%
+%PYTHON% main.py %VIDEO_ID% --races %RACES%
 
 echo.
 echo Done.
