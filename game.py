@@ -209,14 +209,15 @@ class Game:
 
         # Pygame 初期化
         pygame.init()
-        if vertical:
-            self.sw = VERTICAL_W
-            self.sh = VERTICAL_H
-        else:
-            self.sw = SCREEN_W
-            self.sh = SCREEN_H
-        self.screen = pygame.display.set_mode((self.sw, self.sh))
+        self.sw = SCREEN_W
+        self.sh = SCREEN_H
         caption = "YouTube LIVE 競馬ゲーム" + (" [縦型]" if vertical else "")
+        if vertical:
+            self._display = pygame.display.set_mode((VERTICAL_W, VERTICAL_H))
+            self.screen   = pygame.Surface((SCREEN_W, SCREEN_H))
+        else:
+            self._display = pygame.display.set_mode((SCREEN_W, SCREEN_H))
+            self.screen   = self._display
         pygame.display.set_caption(caption)
         self.clock = pygame.time.Clock()
 
@@ -282,24 +283,19 @@ class Game:
             elif self.phase == Phase.RESULTS:
                 self._update_results()
 
-            # 描画
+            # 描画（縦型・横型ともに同じメソッドで1280×720 surfaceに描く）
             self.screen.fill(COL_BG)
-            if self.vertical:
-                if self.phase == Phase.BETTING:
-                    self._draw_betting_vertical()
-                elif self.phase == Phase.RACING:
-                    self._draw_racing_vertical()
-                elif self.phase == Phase.RESULTS:
-                    self._draw_results_vertical()
-            else:
-                if self.phase == Phase.BETTING:
-                    self._draw_betting()
-                elif self.phase == Phase.RACING:
-                    self._draw_racing()
-                elif self.phase == Phase.RESULTS:
-                    self._draw_results()
+            if self.phase == Phase.BETTING:
+                self._draw_betting()
+            elif self.phase == Phase.RACING:
+                self._draw_racing()
+            elif self.phase == Phase.RESULTS:
+                self._draw_results()
 
-            pygame.display.flip()
+            if self.vertical:
+                self._composite_vertical()
+            else:
+                pygame.display.flip()
 
         pygame.quit()
 
@@ -977,354 +973,59 @@ class Game:
                          border_radius=4)
 
 
+
     # ──────────────────────────────────────────────
-    # 縦型モード（720×1280）描画メソッド群
+    # 縦型モード: ゲーム画面を合成してバナーを追加
     # ──────────────────────────────────────────────
 
-    # 縦型レイアウト固定値（720×1280 前提）
-    V_TOP_BANNER_H = 56   # ヘッダー直下: チャンネル登録バナー高さ
-    V_BOT_BANNER_H = 210  # 画面最下部: 購入方法バナー高さ
+    _V_TOP_H  = 100
+    _V_GAME_W = VERTICAL_W                           # 720
+    _V_GAME_H = VERTICAL_W * SCREEN_H // SCREEN_W   # 405
+    _V_BOT_Y  = _V_TOP_H + _V_GAME_H                # 505
+    _V_BOT_H  = VERTICAL_H - _V_BOT_Y               # 775
 
-    def _v_content_top(self) -> int:
-        """縦型コンテンツ開始Y座標"""
-        return HEADER_H + self.V_TOP_BANNER_H
+    def _composite_vertical(self):
+        """縦型: ゲーム面を720×405にスケールし上下バナーと合成してdisplayへ転送"""
+        dsp = self._display
+        dsp.fill(COL_BG)
 
-    def _v_content_bot(self) -> int:
-        """縦型コンテンツ終了Y座標"""
-        return self.sh - self.V_BOT_BANNER_H
+        # ── ゲームコンテンツ（スケール済み）を中段に配置 ──
+        game_scaled = pygame.transform.scale(
+            self.screen, (self._V_GAME_W, self._V_GAME_H))
+        dsp.blit(game_scaled, (0, self._V_TOP_H))
 
-    def _draw_top_banner_v(self):
-        """縦型: ヘッダー直下の告知バナー描画"""
-        sw = self.sw
-        y  = HEADER_H
-        h  = self.V_TOP_BANNER_H
-        # 背景（深い紺+金ライン）
-        pygame.draw.rect(self.screen, (20, 18, 45), pygame.Rect(0, y, sw, h))
-        pygame.draw.line(self.screen, COL_GOLD, (0, y), (sw, y), 2)
-        pygame.draw.line(self.screen, COL_GOLD, (0, y + h - 1), (sw, y + h - 1), 2)
-        # テキスト（中央揃え）
-        text = "毎日配信予定  チャンネル登録よろしく！"
-        surf = self.f_sm.render(text, True, COL_GOLD)
-        tx = (sw - surf.get_width()) // 2
-        ty = y + (h - surf.get_height()) // 2
-        self.screen.blit(surf, (tx, ty))
+        # ── 上バナー ──────────────────────────────────
+        top_r = pygame.Rect(0, 0, VERTICAL_W, self._V_TOP_H)
+        pygame.draw.rect(dsp, (10, 20, 60), top_r)
+        pygame.draw.line(dsp, COL_BORDER,
+                         (0, self._V_TOP_H - 1), (VERTICAL_W, self._V_TOP_H - 1), 2)
+        bs = self.f_sm.render("毎日配信予定  チャンネル登録よろしく！", True, (255, 215, 0))
+        dsp.blit(bs, ((VERTICAL_W - bs.get_width()) // 2,
+                      (self._V_TOP_H - bs.get_height()) // 2))
 
-    def _draw_bottom_banner_v(self):
-        """縦型: 画面最下部の購入方法バナー描画"""
-        sw, sh = self.sw, self.sh
-        h  = self.V_BOT_BANNER_H
-        y  = sh - h
-        # 背景（暗いネイビー）
-        pygame.draw.rect(self.screen, (10, 20, 50), pygame.Rect(0, y, sw, h))
-        pygame.draw.line(self.screen, COL_BORDER, (0, y), (sw, y), 2)
+        # ── 下バナー ──────────────────────────────────
+        bot_r = pygame.Rect(0, self._V_BOT_Y, VERTICAL_W, self._V_BOT_H)
+        pygame.draw.rect(dsp, (10, 20, 60), bot_r)
+        pygame.draw.line(dsp, COL_BORDER,
+                         (0, self._V_BOT_Y), (VERTICAL_W, self._V_BOT_Y), 2)
 
-        lx = 16
-        ly = y + 8
-        # タイトル
-        _draw_text_shadow(self.screen, "コメントで馬券購入！", self.f_md, COL_YELLOW, lx, ly)
-        ly += 44
-        # 購入方法 4行
         lines = [
-            ("!単勝 [馬番] [金額]", "例: !単勝 3 500"),
-            ("!複勝 [馬番] [金額]", "例: !複勝 3 500"),
-            ("!残高", "← 残高確認"),
+            ("コメントで馬券購入！",   self.f_lg, (255, 215, 0)),
+            ("",                       self.f_sm, (0, 0, 0)),
+            ("!単勝 [馬番] [金額]",     self.f_md, (200, 255, 200)),
+            ("  例: !単勝 3 500",      self.f_sm, (160, 220, 160)),
+            ("!複勝 [馬番] [金額]",     self.f_md, (200, 255, 200)),
+            ("  例: !複勝 3 500",      self.f_sm, (160, 220, 160)),
+            ("",                       self.f_sm, (0, 0, 0)),
+            ("!残高 で残高確認",        self.f_md, (200, 255, 200)),
         ]
-        for cmd, ex in lines:
-            cmd_surf = self.f_sm.render(cmd, True, COL_GREEN_BR)
-            ex_surf  = self.f_xs.render(ex,  True, COL_DIM)
-            self.screen.blit(cmd_surf, (lx, ly))
-            self.screen.blit(ex_surf,  (lx + cmd_surf.get_width() + 10,
-                                        ly + (cmd_surf.get_height() - ex_surf.get_height()) // 2 + 2))
-            ly += 36
-
-    def _draw_header_v(self, title: str, countdown: float = -1):
-        """縦型ヘッダー描画"""
-        sw, sh = self.sw, self.sh
-        rect = pygame.Rect(0, 0, sw, HEADER_H)
-        pygame.draw.rect(self.screen, COL_HEADER, rect)
-        pygame.draw.line(self.screen, COL_BORDER, (0, HEADER_H - 1), (sw, HEADER_H - 1), 1)
-
-        title_surf = self.f_md.render(title, True, COL_YELLOW)
-        ty = (HEADER_H - title_surf.get_height()) // 2
-        _draw_text_shadow(self.screen, title, self.f_md, COL_YELLOW, 12, ty)
-
-        if countdown >= 0:
-            secs = int(countdown)
-            col = COL_RED if secs <= 10 else (COL_ORANGE if secs <= 30 else COL_TEXT)
-            cd_text = f"残り{secs}秒"
-            cw = self.f_md.render(cd_text, True, col).get_width()
-            _draw_text_shadow(self.screen, cd_text, self.f_md, col, sw - cw - 12, ty)
-
-        if self.youtube_client is not None:
-            yt_status = self.youtube_client.status
-            col = COL_GREEN_BR if yt_status == "受信中" else (
-                  COL_RED if yt_status.startswith("エラー") else COL_ORANGE)
-            self.screen.blit(
-                self.f_xs.render(f"YT:{yt_status}", True, col),
-                (12, HEADER_H - self.f_xs.get_height() - 2))
-
-    def _draw_betting_vertical(self):
-        """縦型: 馬券受付フェーズ描画"""
-        sw, sh = self.sw, self.sh
-        remaining = self._betting_remaining()
-        self._draw_header_v(f"RACE {self.race_count}  馬券受付中", remaining)
-        self._draw_top_banner_v()
-        self._draw_bottom_banner_v()
-
-        content_top = self._v_content_top()
-        content_bot = self._v_content_bot()
-        content_h   = content_bot - content_top
-
-        # コンテンツ領域をオッズ/コメント/ランキングに3分割（55% / 24% / 21%）
-        table_bottom   = content_top + int(content_h * 0.56)
-        comment_bottom = content_top + int(content_h * 0.79)
-        # オッズテーブルエリア
-        table_h = table_bottom - content_top
-        _draw_panel(self.screen, pygame.Rect(0, content_top, sw, table_h), radius=0)
-
-        lx, ly = 8, content_top + 6
-        _draw_text_shadow(self.screen, "【オッズ】", self.f_md, COL_YELLOW, lx, ly)
-        ly += 44
-
-        win_odds  = self.betting_manager.get_win_odds()
-        show_odds = self.betting_manager.get_show_odds()
-
-        # 縦型用コンパクトレイアウト（幅 720px）
-        TX_NUM   = lx + 2
-        TX_NAME  = lx + 38
-        TX_STYLE = lx + 222
-        TX_WIN   = lx + 258
-        TX_SHOW  = lx + 378
-        ROW_H_V  = 36
-
-        for label, tx in [("馬番", TX_NUM), ("馬名", TX_NAME),
-                           ("脚", TX_STYLE), ("単勝", TX_WIN), ("複勝", TX_SHOW)]:
-            self.screen.blit(self.f_sm.render(label, True, COL_DIM), (tx, ly))
-        ly += 30
-        pygame.draw.line(self.screen, COL_BORDER, (lx, ly), (sw - lx, ly), 1)
-        ly += 3
-
-        for horse in self.horses:
-            if ly + ROW_H_V > table_bottom - 4:
-                break
-            w_odds = win_odds.get(horse.number)
-            s_odds = show_odds.get(horse.number)
-            row_y  = ly + 2
-
-            badge = pygame.Rect(TX_NUM, row_y, 30, 28)
-            pygame.draw.rect(self.screen, horse.color, badge, border_radius=3)
-            ns = self.f_sm.render(str(horse.number), True,
-                                  horse_num_text_color(horse.number))
-            self.screen.blit(ns, (badge.centerx - ns.get_width() // 2,
-                                  badge.y + (badge.height - ns.get_height()) // 2))
-
-            name_w = TX_STYLE - TX_NAME - 4
-            self.screen.blit(
-                _fit_text(horse.name, COL_TEXT, name_w,
-                          [self.f_sm, self.f_xs, self.f_xs2, self.f_xs3]),
-                (TX_NAME, row_y + 2))
-
-            style_col = {"逃げ": COL_RED, "先行": COL_ORANGE,
-                         "差し": COL_GREEN_BR, "追い込み": COL_SILVER}.get(
-                horse.running_style, COL_TEXT)
-            self.screen.blit(self.f_sm.render(horse.style_short, True, style_col),
-                             (TX_STYLE, row_y + 2))
-
-            if w_odds:
-                dw = max(1.0, w_odds)
-                self.screen.blit(
-                    self.f_sm.render(f"{dw:.1f}倍", True,
-                                     COL_GREEN_BR if dw >= 5 else COL_YELLOW),
-                    (TX_WIN, row_y + 2))
+        y = self._V_BOT_Y + 20
+        for text, font, col in lines:
+            if text:
+                surf = font.render(text, True, col)
+                dsp.blit(surf, ((VERTICAL_W - surf.get_width()) // 2, y))
+                y += surf.get_height() + 6
             else:
-                self.screen.blit(self.f_sm.render("---", True, COL_DIM), (TX_WIN, row_y + 2))
+                y += 10
 
-            if s_odds:
-                ds = max(1.0, s_odds)
-                self.screen.blit(
-                    self.f_sm.render(f"{ds:.1f}倍", True,
-                                     COL_GREEN_BR if ds >= 3 else COL_YELLOW),
-                    (TX_SHOW, row_y + 2))
-            else:
-                self.screen.blit(self.f_sm.render("---", True, COL_DIM), (TX_SHOW, row_y + 2))
-
-            ly += ROW_H_V
-
-        # コメントエリア（table_bottom ～ comment_bottom）
-        comment_top_y = table_bottom
-        comment_rect = pygame.Rect(0, comment_top_y, sw, comment_bottom - comment_top_y)
-        _draw_panel(self.screen, comment_rect, radius=0)
-        _draw_text_shadow(self.screen, "最新コメント", self.f_md, COL_YELLOW,
-                          12, comment_top_y + 6)
-        cy = comment_top_y + 46
-        if self.recent_messages:
-            for msg in self.recent_messages[-4:]:
-                disp = msg if len(msg) <= 26 else msg[:25] + "…"
-                self.screen.blit(self.f_sm.render(disp, True, COL_TEXT), (12, cy))
-                cy += 34
-        else:
-            self.screen.blit(self.f_sm.render("コメントを待っています...", True, COL_DIM),
-                             (12, cy))
-
-        # ランキングエリア（comment_bottom ～ content_bot）
-        rank_top = comment_bottom
-        rank_rect = pygame.Rect(0, rank_top, sw, content_bot - rank_top)
-        _draw_panel(self.screen, rank_rect, radius=0)
-        _draw_text_shadow(self.screen, "残高 TOP5", self.f_md, COL_YELLOW, 12, rank_top + 6)
-        ry = rank_top + 46
-        ranking = self.user_manager.get_ranking(5)
-        medal_colors = [COL_GOLD, COL_SILVER, COL_BRONZE, COL_TEXT, COL_TEXT]
-        for i, (name, bal) in enumerate(ranking):
-            col = medal_colors[i]
-            txt = f"{i+1}. {name[:8]}  {bal:,}円"
-            self.screen.blit(self.f_sm.render(txt, True, col), (12, ry))
-            ry += 36
-
-    def _draw_racing_vertical(self):
-        """縦型: レースフェーズ描画（縦スクロール・上から下へ進む）"""
-        sw, sh = self.sw, self.sh
-        elapsed = time.time() - self.phase_start
-        self._draw_header_v(f"RACE {self.race_count}  レース中！")
-        self._draw_top_banner_v()
-        self._draw_bottom_banner_v()
-
-        content_top = self._v_content_top()
-        content_bot = self._v_content_bot()
-        content_h   = content_bot - content_top
-
-        lane_h_v = content_h // NUM_HORSES
-
-        # レーン背景（コンテンツエリア内）
-        for i in range(NUM_HORSES):
-            col = COL_GRASS1 if i % 2 == 0 else COL_GRASS2
-            pygame.draw.rect(self.screen, col,
-                             pygame.Rect(0, content_top + i * lane_h_v, sw, lane_h_v))
-
-        # 区切り線
-        for i in range(1, NUM_HORSES):
-            yy = content_top + i * lane_h_v
-            pygame.draw.line(self.screen, (30, 80, 30), (0, yy), (sw, yy), 1)
-
-        # 各馬: X軸がレーン中央、Y軸がトラック進行度（上→下）
-        for horse in self.horses:
-            lane_cx = (horse.number - 1) * (sw // NUM_HORSES) + sw // NUM_HORSES // 2
-            progress = min(1.0, horse.x / TRACK_LENGTH)
-            screen_y_h = content_top + int(progress * (content_h - lane_h_v))
-            draw_horse(self.screen, horse, lane_cx, screen_y_h + lane_h_v // 2, self.f_num)
-
-        # ゴールライン（コンテンツ最下部）
-        pygame.draw.line(self.screen, COL_WHITE, (0, content_bot - 4), (sw, content_bot - 4), 4)
-
-        # 左上: 経過時間
-        self.screen.blit(self.f_xs.render(f"{int(elapsed)}秒経過", True, COL_DIM),
-                         (8, content_top + 4))
-
-        # 右側着順パネル
-        if self.finish_order:
-            panel_w2 = 160
-            panel_h2 = len(self.finish_order) * 28 + 30
-            pr2 = pygame.Rect(sw - panel_w2 - 4, content_top + 4, panel_w2, panel_h2)
-            _draw_panel(self.screen, pr2)
-            self.screen.blit(self.f_xs.render("着順", True, COL_DIM),
-                             (pr2.x + 4, pr2.y + 4))
-            for i, h in enumerate(self.finish_order):
-                fy2 = pr2.y + 22 + i * 28
-                b2 = pygame.Rect(pr2.x + 4, fy2, 22, 22)
-                pygame.draw.rect(self.screen, h.color, b2, border_radius=2)
-                ns2 = self.f_xs.render(str(h.number), True, horse_num_text_color(h.number))
-                self.screen.blit(ns2, (b2.centerx - ns2.get_width() // 2,
-                                       b2.y + (b2.height - ns2.get_height()) // 2))
-                nm2 = _fit_text(h.name, COL_GOLD if h.finish_rank == 1 else COL_TEXT,
-                                90, [self.f_xs, self.f_xs2, self.f_xs3])
-                self.screen.blit(nm2, (pr2.x + 30, fy2))
-
-    def _draw_results_vertical(self):
-        """縦型: 結果フェーズ描画"""
-        sw, sh = self.sw, self.sh
-        elapsed   = time.time() - self.phase_start
-        remaining = max(0.0, RESULTS_DURATION - elapsed)
-        self._draw_header_v(f"RACE {self.race_count}  結果", remaining)
-        self._draw_top_banner_v()
-        self._draw_bottom_banner_v()
-
-        content_top = self._v_content_top()
-        content_bot = self._v_content_bot()
-        content_h   = content_bot - content_top
-
-        y = content_top + 6
-        section_h = (content_h - 18) // 3
-
-        # 着順パネル（上1/3）
-        order_rect = pygame.Rect(6, y, sw - 12, section_h)
-        _draw_panel(self.screen, order_rect)
-        _draw_text_shadow(self.screen, "着順", self.f_lg, COL_YELLOW,
-                          order_rect.x + 10, order_rect.y + 6)
-        medal_cols = [COL_GOLD, COL_SILVER, COL_BRONZE]
-        for i, horse in enumerate(self.finish_order[:8]):
-            fy = order_rect.y + 58 + i * 44
-            if fy + 44 > order_rect.bottom:
-                break
-            col = medal_cols[i] if i < 3 else COL_TEXT
-            self.screen.blit(self.f_md.render(f"{i+1}着", True, col),
-                             (order_rect.x + 8, fy))
-            badge = pygame.Rect(order_rect.x + 80, fy + 2, 30, 30)
-            pygame.draw.rect(self.screen, horse.color, badge, border_radius=4)
-            bn = self.f_sm.render(str(horse.number), True,
-                                  horse_num_text_color(horse.number))
-            self.screen.blit(bn, (badge.centerx - bn.get_width() // 2,
-                                  badge.y + (badge.height - bn.get_height()) // 2))
-            nm = _fit_text(horse.name, col, sw - 130,
-                           [self.f_md, self.f_sm, self.f_xs, self.f_xs2, self.f_xs3])
-            self.screen.blit(nm, (order_rect.x + 118, fy + 2))
-
-        # 配当パネル（中1/3）
-        y += section_h + 4
-        div_rect = pygame.Rect(6, y, sw - 12, section_h)
-        _draw_panel(self.screen, div_rect)
-        dx, dy2 = div_rect.x + 10, div_rect.y + 6
-        _draw_text_shadow(self.screen, "配当", self.f_lg, COL_YELLOW, dx, dy2)
-        dy2 += 56
-
-        if len(self.finish_order) >= 3:
-            first_num  = self.finish_order[0].number
-            second_num = self.finish_order[1].number
-            third_num  = self.finish_order[2].number
-            win_odds_map  = self.betting_manager.get_win_odds()
-            show_odds_map = self.betting_manager.get_show_odds()
-
-            w_odds = win_odds_map.get(first_num)
-            w_str  = f"{max(1.0, w_odds):.1f}倍" if w_odds else "---"
-            self.screen.blit(
-                self.f_md.render(f"単勝 {first_num}番 {w_str}", True, COL_TEXT), (dx, dy2))
-            dy2 += 44
-            for place_num in (first_num, second_num, third_num):
-                s_odds = show_odds_map.get(place_num)
-                s_str  = f"{max(1.0, s_odds):.1f}倍" if s_odds else "---"
-                self.screen.blit(
-                    self.f_md.render(f"複勝 {place_num}番 {s_str}", True, COL_TEXT), (dx, dy2))
-                dy2 += 40
-
-        # ランキングパネル（下1/3）
-        y += section_h + 4
-        rk_rect = pygame.Rect(6, y, sw - 12, content_bot - y - 4)
-        _draw_panel(self.screen, rk_rect)
-        _draw_text_shadow(self.screen, "残高 TOP5", self.f_lg, COL_YELLOW,
-                          rk_rect.x + 10, rk_rect.y + 6)
-        ranking = self.user_manager.get_ranking(5)
-        medal_colors = [COL_GOLD, COL_SILVER, COL_BRONZE, COL_TEXT, COL_TEXT]
-        for i, (name, bal) in enumerate(ranking):
-            ry = rk_rect.y + 60 + i * 56
-            if ry + 56 > rk_rect.bottom:
-                break
-            col = medal_colors[i]
-            self.screen.blit(self.f_md.render(f"{i+1}位 {name[:8]}", True, col),
-                             (rk_rect.x + 10, ry))
-            self.screen.blit(self.f_md.render(f"   {bal:,}円", True, col),
-                             (rk_rect.x + 10, ry + 30))
-
-        # カウントダウンバー（購入バナーの直上）
-        bar_y = content_bot + 4
-        bar_w = int((remaining / RESULTS_DURATION) * (sw - 20))
-        pygame.draw.rect(self.screen, COL_BORDER, (10, bar_y, sw - 20, 8), border_radius=4)
-        pygame.draw.rect(self.screen, COL_GREEN_BR, (10, bar_y, bar_w, 8), border_radius=4)
-
+        pygame.display.flip()

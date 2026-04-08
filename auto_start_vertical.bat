@@ -4,6 +4,14 @@ REM auto_start_vertical.bat - YouTube LIVE Keiba (Vertical Mode)
 REM
 REM [Required] Set YOUTUBE_API_KEY below before running.
 REM
+REM [OBS auto-start setup]
+REM   To have OBS start streaming automatically:
+REM   1. In OBS: Tools -> WebSocket Server Settings
+REM      -> Enable WebSocket server (check the box)
+REM      -> Set a password (optional but recommended)
+REM   2. Set OBS_PASSWORD below to match (leave blank if no password)
+REM   Without this, you must start the OBS stream manually.
+REM
 REM [Python version]
 REM   pygame requires Python 3.9-3.12.
 REM   If you have Python 3.14, install 3.12 from:
