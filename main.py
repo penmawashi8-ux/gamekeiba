@@ -252,8 +252,21 @@ def main() -> int:
                     if len(_lines) >= 2:
                         _ss, _sk = _lines[0], _lines[1]
             if _ss and _sk:
-                obs_ctrl.configure_stream(_ss, _sk)
-            obs_ctrl.start_stream()
+                ok = obs_ctrl.configure_stream(_ss, _sk)
+                if ok:
+                    time.sleep(1)  # OBS が設定を適用するまで少し待つ
+                    obs_ctrl.start_stream()
+                else:
+                    logger.warning(
+                        "OBS ストリーム設定に失敗しました。OBSで手動設定してください。\n"
+                        "  RTMP Server : %s\n"
+                        "  Stream Key  : %s", _ss, _sk
+                    )
+            else:
+                logger.warning(
+                    "stream_settings.txt が見つかりません。"
+                    "create_broadcast.py を先に実行してください。"
+                )
         else:
             logger.warning("OBS に接続できませんでした。OBS制御をスキップします。")
 
