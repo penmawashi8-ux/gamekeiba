@@ -904,12 +904,12 @@ class Game:
         right_x2 = order_rect.right + 8
         right_w2  = SCREEN_W - right_x2 - 8
 
-        # 配当パネル
-        div_rect = pygame.Rect(right_x2, HEADER_H + 8, right_w2, 260)
+        # 配当パネル（高さを絞る: title 50 + 単勝 40 + 複勝×3×36 = 198 → 210）
+        div_rect = pygame.Rect(right_x2, HEADER_H + 8, right_w2, 210)
         _draw_panel(self.screen, div_rect)
-        dx, dy = div_rect.x + 12, div_rect.y + 10
+        dx, dy = div_rect.x + 12, div_rect.y + 8
         _draw_text_shadow(self.screen, "配当", self.f_lg, COL_YELLOW, dx, dy)
-        dy += 58
+        dy += 50
 
         first_num  = self.finish_order[0].number
         second_num = self.finish_order[1].number
@@ -922,7 +922,7 @@ class Game:
         w_str  = f"{max(1.0, w_odds):.1f}倍" if w_odds else "---"
         self.screen.blit(
             self.f_md.render(f"単勝 {first_num}番 {w_str}", True, COL_TEXT), (dx, dy))
-        dy += 44
+        dy += 40
 
         # 複勝（1〜3着）
         for place_num in (first_num, second_num, third_num):
@@ -930,43 +930,44 @@ class Game:
             s_str  = f"{max(1.0, s_odds):.1f}倍" if s_odds else "---"
             self.screen.blit(
                 self.f_md.render(f"複勝 {place_num}番 {s_str}", True, COL_TEXT), (dx, dy))
-            dy += 40
+            dy += 36
 
-        # 払い戻しパネル
-        pay_rect = pygame.Rect(right_x2, div_rect.bottom + 8, right_w2, 200)
+        # 払い戻しパネル（title 36 + items×30 = 156 → 160）
+        pay_rect = pygame.Rect(right_x2, div_rect.bottom + 8, right_w2, 160)
         _draw_panel(self.screen, pay_rect)
         px, py_start = pay_rect.x + 12, pay_rect.y + 8
         if self.payout_results:
-            _draw_text_shadow(self.screen, "払い戻し", self.f_md, COL_YELLOW, px, py_start)
-            py_ = py_start + 44
+            _draw_text_shadow(self.screen, "払い戻し", self.f_sm, COL_YELLOW, px, py_start)
+            py_ = py_start + 36
             for pr in self.payout_results[:4]:
                 type_label = "単勝" if pr.bet_type == "win" else "複勝"
                 line = (f"{pr.display_name[:6]} {type_label}{pr.horse_label}"
                         f" {pr.odds:.1f}倍→{pr.payout_amount:,}円")
                 self.screen.blit(self.f_sm.render(line, True, COL_GREEN_BR), (px, py_))
-                py_ += 34
+                py_ += 30
         else:
             _draw_text_shadow(self.screen, "払い戻しなし", self.f_md, COL_DIM,
                               px, py_start + 10)
 
-        # 残高ランキングパネル
+        # 残高ランキングパネル（残りすべて: ≈ 248px）
+        # title 46 + 5items×38 = 236 → 248に収まる
         rk_rect = pygame.Rect(right_x2, pay_rect.bottom + 8,
                               right_w2, SCREEN_H - pay_rect.bottom - 16)
         _draw_panel(self.screen, rk_rect)
-        _draw_text_shadow(self.screen, "残高 TOP5", self.f_lg, COL_YELLOW,
-                          rk_rect.x + 12, rk_rect.y + 8)
+        _draw_text_shadow(self.screen, "残高 TOP5", self.f_md, COL_YELLOW,
+                          rk_rect.x + 12, rk_rect.y + 6)
 
         ranking = self.user_manager.get_ranking(5)
         medal_colors = [COL_GOLD, COL_SILVER, COL_BRONZE, COL_TEXT, COL_TEXT]
         for i, (name, bal) in enumerate(ranking):
-            ry = rk_rect.y + 62 + i * 72
+            ry = rk_rect.y + 44 + i * 38
             col = medal_colors[i]
-            self.screen.blit(
-                self.f_lg.render(f"{i+1}位", True, col), (rk_rect.x + 12, ry))
-            self.screen.blit(
-                self.f_md.render(name[:10], True, col), (rk_rect.x + 110, ry + 4))
-            self.screen.blit(
-                self.f_lg.render(f"{bal:,}円", True, col), (rk_rect.x + 12, ry + 40))
+            rank_s  = self.f_sm.render(f"{i+1}位", True, col)
+            name_s  = self.f_sm.render(name[:10], True, col)
+            bal_s   = self.f_sm.render(f"{bal:,}円", True, col)
+            self.screen.blit(rank_s, (rk_rect.x + 10, ry))
+            self.screen.blit(name_s, (rk_rect.x + 90, ry))
+            self.screen.blit(bal_s,  (rk_rect.right - bal_s.get_width() - 10, ry))
 
         # 次レースまでのカウントダウンバー
         bar_w = int((remaining / RESULTS_DURATION) * (SCREEN_W - 40))
