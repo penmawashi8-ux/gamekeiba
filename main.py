@@ -254,11 +254,14 @@ def main() -> int:
             if _ss and _sk:
                 ok = obs_ctrl.configure_stream(_ss, _sk)
                 if ok:
-                    time.sleep(1)  # OBS が設定を適用するまで少し待つ
+                    logger.info("OBS ストリーム設定完了。3秒後に配信開始...")
+                    time.sleep(3)  # OBS が設定を確実に適用してから開始
                     obs_ctrl.start_stream()
                 else:
                     logger.warning(
-                        "OBS ストリーム設定に失敗しました。OBSで手動設定してください。\n"
+                        "OBS ストリーム設定に失敗しました。\n"
+                        "OBS の ツール→WebSocketサーバー設定 が有効か確認してください。\n"
+                        "手動で配信開始する場合は以下を OBS の設定→配信 に入力:\n"
                         "  RTMP Server : %s\n"
                         "  Stream Key  : %s", _ss, _sk
                     )

@@ -201,6 +201,7 @@ def _do_create_broadcast(youtube, title: str, scheduled_start_time: str) -> tupl
                 "enableAutoStart": True,
                 "enableAutoStop": True,
                 "enableDvr": False,          # 巻き戻し禁止（リアルタイムのみ）
+                "latencyPreference": "ultraLow",  # 超低遅延モード（約1-3秒）
             },
         },
     ).execute()

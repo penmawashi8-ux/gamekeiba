@@ -138,20 +138,20 @@ class Horse:
         s = self.running_style
 
         if s == "逃げ":
-            # 前半強く、後半急失速
-            if progress < 0.3:
-                return 1.30
-            elif progress < 0.65:
-                return 1.30 - (progress - 0.3) * 0.65   # 1.30→1.07
+            # 前半先行よりやや速い程度、後半じわじわ失速
+            if progress < 0.40:
+                return 1.15                                           # 1.30→1.15 に弱体化
+            elif progress < 0.70:
+                return 1.15 - (progress - 0.40) * 0.55              # 1.15→0.985
             else:
-                return max(0.78, 1.07 - (progress - 0.65) * 0.83)  # 1.07→0.78
+                return max(0.76, 0.985 - (progress - 0.70) * 0.75)  # →最小0.76
 
         elif s == "先行":
             # 前半やや速く、後半ゆるやか失速
             if progress < 0.5:
-                return 1.12
+                return 1.10
             else:
-                return max(0.92, 1.12 - (progress - 0.5) * 0.40)
+                return max(0.90, 1.10 - (progress - 0.5) * 0.40)
 
         elif s == "差し":
             # 前半はぐっと抑え、後半豪快に差す（最大1.52倍）

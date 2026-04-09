@@ -978,14 +978,14 @@ class Game:
     # 縦型モード: ゲーム画面を合成してバナーを追加
     # ──────────────────────────────────────────────
 
-    _V_TOP_H  = 100
-    _V_GAME_W = VERTICAL_W                           # 720
-    _V_GAME_H = VERTICAL_W * SCREEN_H // SCREEN_W   # 405
-    _V_BOT_Y  = _V_TOP_H + _V_GAME_H                # 505
-    _V_BOT_H  = VERTICAL_H - _V_BOT_Y               # 775
+    _V_TOP_H  = 80
+    _V_GAME_W = VERTICAL_W   # 720
+    _V_GAME_H = 540          # 4:3 に引き伸ばし（16:9の405より大きく読みやすく）
+    _V_BOT_Y  = _V_TOP_H + _V_GAME_H   # 620
+    _V_BOT_H  = VERTICAL_H - _V_BOT_Y  # 660
 
     def _composite_vertical(self):
-        """縦型: ゲーム面を720×405にスケールし上下バナーと合成してdisplayへ転送"""
+        """縦型: ゲーム面を720×540にスケールし上下バナーと合成してdisplayへ転送"""
         dsp = self._display
         dsp.fill(COL_BG)
 
