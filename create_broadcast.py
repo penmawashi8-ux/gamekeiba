@@ -124,12 +124,15 @@ STREAM_SETTINGS_FILE = os.path.join(_BASE_DIR, "stream_settings.txt")
 
 
 def _is_rate_limit_error(e) -> bool:
-    """HttpError が userRequestsExceedRateLimit かどうかを判定する"""
+    """HttpError がクォータ超過エラーかどうかを判定する"""
     try:
         status = int(e.resp.status)
     except Exception:
         return False
-    return status == 403 and "userRequestsExceedRateLimit" in str(e)
+    if status != 403:
+        return False
+    err = str(e)
+    return "userRequestsExceedRateLimit" in err or "quotaExceeded" in err
 
 
 def _get_or_create_stream(youtube) -> dict:
