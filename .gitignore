@@ -11,8 +11,10 @@ build/
 venv/
 .venv/
 token.json
+token2.json
 client_secret.json
-auto_start.bat
-config.bat
+client_secret2.json
+config.local.bat
 stream_id.txt
 stream_settings.txt
+_tmp_st.txt

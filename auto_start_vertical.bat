@@ -2,36 +2,31 @@
 REM ============================================================
 REM auto_start_vertical.bat - YouTube LIVE Keiba (Vertical Mode)
 REM
-REM [Required] Set YOUTUBE_API_KEY below before running.
-REM
-REM [OBS auto-start setup]
-REM   To have OBS start streaming automatically:
-REM   1. In OBS: Tools -> WebSocket Server Settings
-REM      -> Enable WebSocket server (check the box)
-REM      -> Set a password (optional but recommended)
-REM   2. Set OBS_PASSWORD below to match (leave blank if no password)
-REM   Without this, you must start the OBS stream manually.
-REM
-REM [Python version]
-REM   pygame requires Python 3.9-3.12.
-REM   If you have Python 3.14, install 3.12 from:
-REM     https://www.python.org/downloads/release/python-3128/
-REM   Then change the PYTHON line below to:
-REM     set PYTHON=py -3.12
+REM Credentials are loaded from config.local.bat (not in git).
+REM Copy config.local.example.bat to config.local.bat and fill in.
 REM ============================================================
 
-REM --- User Settings ---
+REM --- Defaults (overridden by config.local.bat) ---
 set YOUTUBE_API_KEY=YOUR_YOUTUBE_API_KEY_HERE
 set OBS_PASSWORD=
 set GAME_FONT_PATH=
 set RACES=10
 set START_TIME=
-
-REM --- Python executable (change to "py -3.12" if needed) ---
 set PYTHON=python
 
-REM --- Move to script folder ---
+REM --- Move to script folder first so config.local.bat path is correct ---
 cd /d "%~dp0"
+
+REM --- Load local config ---
+if exist "config.local.bat" (
+    call "config.local.bat"
+    echo [INFO] Loaded config.local.bat
+) else (
+    echo [WARN] config.local.bat not found.
+    echo   Copy config.local.example.bat to config.local.bat and fill in your settings.
+    echo.
+)
+
 echo [INFO] Working folder: %CD%
 
 REM --- Check Python ---
@@ -42,15 +37,12 @@ if errorlevel 1 (
     goto :error
 )
 
-REM --- Warn if Python 3.13+ (pygame may not have wheels) ---
+REM --- Warn if Python 3.13+ ---
 %PYTHON% -c "import sys; exit(0 if sys.version_info < (3,13) else 1)" >nul 2>&1
 if errorlevel 1 (
     echo.
-    echo [WARN] Python 3.13 or newer detected.
-    echo   pygame may not install correctly on this version.
-    echo   If install fails, install Python 3.12 and set:
-    echo     set PYTHON=py -3.12
-    echo   in this file, then re-run.
+    echo [WARN] Python 3.13+ detected. pygame may not install correctly.
+    echo   If install fails, set PYTHON=py -3.12 in config.local.bat
     echo.
 )
 
@@ -64,18 +56,14 @@ REM --- Install requirements ---
 echo [INFO] Checking packages...
 %PYTHON% -m pip install -r requirements.txt -q
 if errorlevel 1 (
-    echo.
-    echo [ERROR] pip install failed.
-    echo   If the error mentions pygame, install Python 3.12 and set:
-    echo     set PYTHON=py -3.12
-    echo   in this file, then re-run.
+    echo [ERROR] pip install failed. Set PYTHON=py -3.12 in config.local.bat if needed.
     goto :error
 )
 echo [INFO] Packages OK
 
 REM --- Check API key ---
 if "%YOUTUBE_API_KEY%"=="YOUR_YOUTUBE_API_KEY_HERE" (
-    echo [ERROR] Set YOUTUBE_API_KEY in this file before running.
+    echo [ERROR] Set YOUTUBE_API_KEY in config.local.bat
     goto :error
 )
 
