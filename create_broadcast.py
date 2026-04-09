@@ -337,9 +337,10 @@ def main():
     now = datetime.now(JST)
 
     if args.instant:
-        # 即時配信: scheduledStartTime を設定しない（縦型ライブフィードに表示される）
+        # 即時配信: scheduledStartTime を現在時刻に設定（縦型ライブフィード対応）
+        # YouTube APIはscheduledStartTimeが必須なので現在時刻をそのまま渡す
         title = f"【コメント参加型】バーチャル競馬LIVE {now.month}月{now.day}日"
-        scheduled_start_time = None
+        scheduled_start_time = now.strftime("%Y-%m-%dT%H:%M:%S+09:00")
         print(f"[INFO] 即時配信モード（縦型ライブフィード対応）", file=sys.stderr)
         print(f"[INFO] 配信タイトル: {title}", file=sys.stderr)
     else:
