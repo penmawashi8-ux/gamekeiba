@@ -735,10 +735,13 @@ class Game:
         ry = mid_y + 52
         ranking = self.user_manager.get_ranking(5)
         medal_colors = [COL_GOLD, COL_SILVER, COL_BRONZE, COL_TEXT, COL_TEXT]
+        rank_max_w = right_w - 20  # 左右10pxずつ余白
         for i, (name, bal) in enumerate(ranking):
             col = medal_colors[i]
             rank_txt = f"{i+1}. {name[:8]}  {bal:,}円"
-            self.screen.blit(self.f_md.render(rank_txt, True, col), (right_x + 10, ry))
+            rank_surf = _fit_text(rank_txt, col, rank_max_w,
+                                  [self.f_md, self.f_sm, self.f_xs])
+            self.screen.blit(rank_surf, (right_x + 10, ry))
             ry += 42
 
         # 区切り線（左右の境界）
@@ -967,17 +970,17 @@ class Game:
     # ──────────────────────────────────────────────
 
     _V_TOP_H  = 50
-    _V_GAME_W = VERTICAL_W   # 720
-    _V_GAME_H = 660          # 大きく表示（レーン1本74px、読みやすい）
-    _V_BOT_Y  = _V_TOP_H + _V_GAME_H   # 710
-    _V_BOT_H  = VERTICAL_H - _V_BOT_Y  # 570
+    _V_GAME_W = VERTICAL_W                              # 720
+    _V_GAME_H = SCREEN_H * VERTICAL_W // SCREEN_W      # 405（16:9維持）
+    _V_BOT_Y  = _V_TOP_H + _V_GAME_H                   # 455
+    _V_BOT_H  = VERTICAL_H - _V_BOT_Y                  # 825
 
     def _composite_vertical(self):
-        """縦型: ゲーム面を720×660にスケールし上下バナーと合成してdisplayへ転送"""
+        """縦型: ゲーム面を720×405（16:9維持）にスケールし上下バナーと合成してdisplayへ転送"""
         dsp = self._display
         dsp.fill(COL_BG)
 
-        # ── ゲームコンテンツ（スケール済み）を中段に配置 ──
+        # ── ゲームコンテンツ（16:9を維持してスケール）──
         game_scaled = pygame.transform.smoothscale(
             self.screen, (self._V_GAME_W, self._V_GAME_H))
         dsp.blit(game_scaled, (0, self._V_TOP_H))
@@ -997,21 +1000,37 @@ class Game:
         pygame.draw.line(dsp, COL_BORDER,
                          (0, self._V_BOT_Y), (VERTICAL_W, self._V_BOT_Y), 2)
 
-        lines = [
+        y = self._V_BOT_Y + 24
+
+        # 操作説明
+        for text, font, col in [
             ("コメントで参加！",              self.f_lg, (255, 215, 0)),
             ("単[馬番] [金額]  例: 単3 500",  self.f_md, (200, 255, 200)),
             ("複[馬番] [金額]  例: 複3 500",  self.f_md, (200, 255, 200)),
             ("残高 で残高確認",               self.f_md, (200, 255, 200)),
-            ("",                              self.f_sm, (0, 0, 0)),
-            ("毎日配信！チャンネル登録よろしく",  self.f_sm, (255, 215, 0)),
-        ]
-        y = self._V_BOT_Y + 24
-        for text, font, col in lines:
-            if text:
-                surf = font.render(text, True, col)
-                dsp.blit(surf, ((VERTICAL_W - surf.get_width()) // 2, y))
-                y += surf.get_height() + 8
-            else:
-                y += 16
+        ]:
+            surf = font.render(text, True, col)
+            dsp.blit(surf, ((VERTICAL_W - surf.get_width()) // 2, y))
+            y += surf.get_height() + 10
+
+        # 残高ランキング
+        y += 16
+        sep = self.f_md.render("── 残高 TOP5 ──", True, (255, 215, 0))
+        dsp.blit(sep, ((VERTICAL_W - sep.get_width()) // 2, y))
+        y += sep.get_height() + 10
+
+        ranking = self.user_manager.get_ranking(5)
+        medal_colors = [COL_GOLD, COL_SILVER, COL_BRONZE, COL_TEXT, COL_TEXT]
+        for i, (name, bal) in enumerate(ranking):
+            rank_txt = f"{i+1}. {name[:8]}  {bal:,}円"
+            rank_surf = _fit_text(rank_txt, medal_colors[i], VERTICAL_W - 20,
+                                  [self.f_md, self.f_sm, self.f_xs])
+            dsp.blit(rank_surf, ((VERTICAL_W - rank_surf.get_width()) // 2, y))
+            y += rank_surf.get_height() + 8
+
+        # チャンネルプロモ
+        y += 16
+        promo = self.f_sm.render("毎日配信！チャンネル登録よろしく", True, (255, 215, 0))
+        dsp.blit(promo, ((VERTICAL_W - promo.get_width()) // 2, y))
 
         pygame.display.flip()
