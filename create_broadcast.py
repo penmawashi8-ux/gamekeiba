@@ -190,9 +190,9 @@ def _do_create_broadcast(youtube, title: str, scheduled_start_time: str) -> tupl
         "description": (
             "バーチャル競馬LIVE 自動配信\n\n"
             "コメントで馬券を購入しよう！\n"
-            "  !単勝 [馬番] [金額]   例: !単勝 3 500\n"
-            "  !複勝 [馬番] [金額]   例: !複勝 3 500\n"
-            "  !残高"
+            "  単[馬番] [金額]   例: 単3 500\n"
+            "  複[馬番] [金額]   例: 複3 500\n"
+            "  残高"
         ),
     }
     if scheduled_start_time:

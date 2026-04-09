@@ -138,36 +138,36 @@ class Horse:
         s = self.running_style
 
         if s == "逃げ":
-            # 前半先行よりやや速い程度、後半じわじわ失速
-            if progress < 0.40:
-                return 1.15                                           # 1.30→1.15 に弱体化
-            elif progress < 0.70:
-                return 1.15 - (progress - 0.40) * 0.55              # 1.15→0.985
+            # 序盤だけ先行より速いが、中盤から急激に失速する高リスクスタイル
+            if progress < 0.30:
+                return 1.10                                           # 前30%: 先頭を走る
+            elif progress < 0.60:
+                return 1.10 - (progress - 0.30) * 0.933             # 1.10→0.82 急降下
             else:
-                return max(0.76, 0.985 - (progress - 0.70) * 0.75)  # →最小0.76
+                return max(0.62, 0.82 - (progress - 0.60) * 1.00)   # →最小0.62 スタミナ切れ
 
         elif s == "先行":
-            # 前半やや速く、後半ゆるやか失速
+            # 安定型: 前半やや速く、後半ゆるやか失速
             if progress < 0.5:
                 return 1.10
             else:
                 return max(0.90, 1.10 - (progress - 0.5) * 0.40)
 
         elif s == "差し":
-            # 前半はぐっと抑え、後半豪快に差す（最大1.52倍）
-            if progress < 0.60:
-                return 0.80                                      # 前半: かなり抑える
+            # 後半豪快に差す: 前55%は抑えて、後45%で爆発（最大1.58倍）
+            if progress < 0.55:
+                return 0.80
             elif progress < 0.70:
-                return 0.80 + (progress - 0.60) * 1.40          # 0.80→0.94 加速準備
+                return 0.80 + (progress - 0.55) * 1.60              # 0.80→1.04 加速準備
             else:
-                return 0.94 + (progress - 0.70) * 1.90          # 最大1.51 豪快な差し！
+                return 1.04 + (progress - 0.70) * 1.80              # 最大1.58 豪快な差し！
 
         else:  # 追い込み
-            # 後半3割だけ猛加速
-            if progress < 0.65:
-                return 0.82
+            # 後半38%だけ猛加速（最大1.56倍）
+            if progress < 0.62:
+                return 0.80
             else:
-                return 0.82 + (progress - 0.65) * 1.80   # 最大1.47
+                return 0.80 + (progress - 0.62) * 2.00              # 最大1.56
 
     def setup_race(self):
         """レース開始時に速度・位置をリセットする"""

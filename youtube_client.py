@@ -1,19 +1,20 @@
 """
 YouTube Live Chat クライアントモジュール
 
-YouTube Data API v3 でライブチャットを5秒間隔でポーリングし、
+YouTube Data API v3 でライブチャットをポーリングし、
 コマンドをキューに投入する。
 
-コマンド仕様:
-  !単勝 [馬番] [金額]   例: !単勝 3 500
-  !複勝 [馬番] [金額]   例: !複勝 3 500
-  !残高
+コマンド仕様（! は省略可、単勝→単、複勝→複 でもOK）:
+  単[馬番] [金額]   例: 単3 500
+  複[馬番] [金額]   例: 複3 500
+  残高
 
 --test 引数でダミーコメントを投入するテストモードも提供する。
 """
 
 import queue
 import random
+import re
 import threading
 import time
 import logging
@@ -73,82 +74,31 @@ def parse_comment(channel_id: str, display_name: str,
     # 「円」suffix を除去（例: 500円 → 500）
     text = text.replace("円", "")
 
-    # 単勝: !単勝 馬番 金額
-    if text.startswith("!単勝"):
-        parts = text.split()
-        if len(parts) == 3:
-            try:
-                horse  = int(parts[1])
-                amount = int(parts[2])
-                if 1 <= horse <= 8 and amount > 0:
-                    if amount % 100 != 0:
-                        return ParsedCommand(
-                            channel_id=channel_id,
-                            display_name=display_name,
-                            command_type=CMD_ERROR,
-                            horse1=horse,
-                            amount=amount,
-                            raw_text=text,
-                            timestamp=timestamp,
-                            error_message=(
-                                f"金額は100円単位で入力してください "
-                                f"（例: !単勝 {horse} {(amount // 100 + 1) * 100}）"
-                            ),
-                        )
-                    return ParsedCommand(
-                        channel_id=channel_id,
-                        display_name=display_name,
-                        command_type=CMD_WIN,
-                        horse1=horse,
-                        amount=amount,
-                        raw_text=text,
-                        timestamp=timestamp,
-                    )
-            except ValueError:
-                pass
-        return None
-
-    # 複勝: !複勝 馬番 金額
-    if text.startswith("!複勝"):
-        parts = text.split()
-        if len(parts) == 3:
-            try:
-                horse  = int(parts[1])
-                amount = int(parts[2])
-                if 1 <= horse <= 8 and amount > 0:
-                    if amount % 100 != 0:
-                        return ParsedCommand(
-                            channel_id=channel_id,
-                            display_name=display_name,
-                            command_type=CMD_ERROR,
-                            horse1=horse,
-                            amount=amount,
-                            raw_text=text,
-                            timestamp=timestamp,
-                            error_message=(
-                                f"金額は100円単位で入力してください "
-                                f"（例: !複勝 {horse} {(amount // 100 + 1) * 100}）"
-                            ),
-                        )
-                    return ParsedCommand(
-                        channel_id=channel_id,
-                        display_name=display_name,
-                        command_type=CMD_SHOW,
-                        horse1=horse,
-                        amount=amount,
-                        raw_text=text,
-                        timestamp=timestamp,
-                    )
-            except ValueError:
-                pass
-        return None
-
-    # 残高確認: !残高
-    if text.strip() == "!残高":
+    # 残高確認: 残高 / !残高
+    if re.fullmatch(r"!?残高", text):
         return ParsedCommand(
             channel_id=channel_id,
             display_name=display_name,
             command_type=CMD_BALANCE,
+            raw_text=text,
+            timestamp=timestamp,
+        )
+
+    # 単勝/複勝: !?（単勝?|複勝?）スペース?馬番 金額
+    # 受け付ける例: 単3 500 / 単勝3 500 / 単 3 500 / !単勝 3 500 / !単3 500
+    m = re.fullmatch(r"!?(?P<type>単勝?|複勝?) *(?P<horse>[1-8]) +(?P<amount>\d+)", text)
+    if m:
+        horse  = int(m.group("horse"))
+        amount = (int(m.group("amount")) // 100) * 100  # 100円単位に切り捨て
+        if amount < 100:
+            return None
+        cmd_type = CMD_WIN if m.group("type")[0] == "単" else CMD_SHOW
+        return ParsedCommand(
+            channel_id=channel_id,
+            display_name=display_name,
+            command_type=cmd_type,
+            horse1=horse,
+            amount=amount,
             raw_text=text,
             timestamp=timestamp,
         )

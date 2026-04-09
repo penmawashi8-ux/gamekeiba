@@ -581,18 +581,6 @@ class Game:
             _draw_text_shadow(self.screen, cd_text, self.f_md, col,
                               SCREEN_W - cw - 16, ty)
 
-        # YouTube接続ステータス（右下隅）
-        if self.youtube_client is not None:
-            yt_status = self.youtube_client.status
-            col = COL_GREEN_BR if yt_status == "受信中" else (
-                  COL_RED   if yt_status.startswith("エラー") else COL_ORANGE)
-            self.screen.blit(
-                self.f_xs.render(f"YT:{yt_status}", True, col),
-                (16, HEADER_H - self.f_xs.get_height() - 2))
-        elif self.test_client is not None:
-            self.screen.blit(
-                self.f_xs.render("テストモード", True, COL_DIM),
-                (16, HEADER_H - self.f_xs.get_height() - 2))
 
     # ──────────────────────────────────────────────
     # 描画: 馬券受付フェーズ
@@ -603,7 +591,7 @@ class Game:
         remaining = self._betting_remaining()
         self._draw_header(
             f"RACE {self.race_count}  馬券受付中",
-            "  ".join(f"{h.number}:{h.name}" for h in self.horses[:4]),
+            "",
             remaining,
         )
 
@@ -978,14 +966,14 @@ class Game:
     # 縦型モード: ゲーム画面を合成してバナーを追加
     # ──────────────────────────────────────────────
 
-    _V_TOP_H  = 80
+    _V_TOP_H  = 50
     _V_GAME_W = VERTICAL_W   # 720
-    _V_GAME_H = 540          # 4:3 に引き伸ばし（16:9の405より大きく読みやすく）
-    _V_BOT_Y  = _V_TOP_H + _V_GAME_H   # 620
-    _V_BOT_H  = VERTICAL_H - _V_BOT_Y  # 660
+    _V_GAME_H = 660          # 大きく表示（レーン1本74px、読みやすい）
+    _V_BOT_Y  = _V_TOP_H + _V_GAME_H   # 710
+    _V_BOT_H  = VERTICAL_H - _V_BOT_Y  # 570
 
     def _composite_vertical(self):
-        """縦型: ゲーム面を720×540にスケールし上下バナーと合成してdisplayへ転送"""
+        """縦型: ゲーム面を720×660にスケールし上下バナーと合成してdisplayへ転送"""
         dsp = self._display
         dsp.fill(COL_BG)
 
@@ -999,7 +987,7 @@ class Game:
         pygame.draw.rect(dsp, (10, 20, 60), top_r)
         pygame.draw.line(dsp, COL_BORDER,
                          (0, self._V_TOP_H - 1), (VERTICAL_W, self._V_TOP_H - 1), 2)
-        bs = self.f_sm.render("毎日配信予定  チャンネル登録よろしく！", True, (255, 215, 0))
+        bs = self.f_sm.render("バーチャル競馬LIVE  コメントで参加！", True, (255, 215, 0))
         dsp.blit(bs, ((VERTICAL_W - bs.get_width()) // 2,
                       (self._V_TOP_H - bs.get_height()) // 2))
 
@@ -1010,22 +998,20 @@ class Game:
                          (0, self._V_BOT_Y), (VERTICAL_W, self._V_BOT_Y), 2)
 
         lines = [
-            ("コメントで馬券購入！",   self.f_lg, (255, 215, 0)),
-            ("",                       self.f_sm, (0, 0, 0)),
-            ("!単勝 [馬番] [金額]",     self.f_md, (200, 255, 200)),
-            ("  例: !単勝 3 500",      self.f_sm, (160, 220, 160)),
-            ("!複勝 [馬番] [金額]",     self.f_md, (200, 255, 200)),
-            ("  例: !複勝 3 500",      self.f_sm, (160, 220, 160)),
-            ("",                       self.f_sm, (0, 0, 0)),
-            ("!残高 で残高確認",        self.f_md, (200, 255, 200)),
+            ("コメントで参加！",              self.f_lg, (255, 215, 0)),
+            ("単[馬番] [金額]  例: 単3 500",  self.f_md, (200, 255, 200)),
+            ("複[馬番] [金額]  例: 複3 500",  self.f_md, (200, 255, 200)),
+            ("残高 で残高確認",               self.f_md, (200, 255, 200)),
+            ("",                              self.f_sm, (0, 0, 0)),
+            ("毎日配信！チャンネル登録よろしく",  self.f_sm, (255, 215, 0)),
         ]
-        y = self._V_BOT_Y + 20
+        y = self._V_BOT_Y + 24
         for text, font, col in lines:
             if text:
                 surf = font.render(text, True, col)
                 dsp.blit(surf, ((VERTICAL_W - surf.get_width()) // 2, y))
-                y += surf.get_height() + 6
+                y += surf.get_height() + 8
             else:
-                y += 10
+                y += 16
 
         pygame.display.flip()
