@@ -179,29 +179,35 @@ def _do_create_broadcast(youtube, title: str, scheduled_start_time: str) -> tupl
 
     rate limit エラーは呼び出し元に伝播させる（フォールバック処理のため）。
 
+    Args:
+        scheduled_start_time: ISO 8601 形式の開始時刻。None の場合は即時配信（縦型対応）。
+
     Returns:
         (broadcast_id, rtmp_server, stream_key)
     """
+    snippet = {
+        "title": title,
+        "description": (
+            "バーチャル競馬LIVE 自動配信\n\n"
+            "コメントで馬券を購入しよう！\n"
+            "  !単勝 [馬番] [金額]   例: !単勝 3 500\n"
+            "  !複勝 [馬番] [金額]   例: !複勝 3 500\n"
+            "  !残高"
+        ),
+    }
+    if scheduled_start_time:
+        snippet["scheduledStartTime"] = scheduled_start_time
+
     broadcast = youtube.liveBroadcasts().insert(
         part="snippet,status,contentDetails",
         body={
-            "snippet": {
-                "title": title,
-                "scheduledStartTime": scheduled_start_time,
-                "description": (
-                    "バーチャル競馬LIVE 自動配信\n\n"
-                    "コメントで馬券を購入しよう！\n"
-                    "  !単勝 [馬番] [金額]   例: !単勝 3 500\n"
-                    "  !複勝 [馬番] [金額]   例: !複勝 3 500\n"
-                    "  !残高"
-                ),
-            },
+            "snippet": snippet,
             "status": {"privacyStatus": "unlisted"},
             "contentDetails": {
                 "enableAutoStart": True,
                 "enableAutoStop": True,
-                "enableDvr": False,          # 巻き戻し禁止（リアルタイムのみ）
-                "latencyPreference": "ultraLow",  # 超低遅延モード（約1-3秒）
+                "enableDvr": False,
+                "latencyPreference": "ultraLow",
             },
         },
     ).execute()
@@ -320,40 +326,51 @@ def main():
         metavar="DATETIME",
         help="配信開始時刻（ISO 8601形式）。例: 2026-04-06T21:00:00+09:00。省略時は当日19時(JST)。",
     )
+    parser.add_argument(
+        "--instant",
+        action="store_true",
+        help="即時配信モード（縦型ライブフィード対応）。スケジュール設定なしで作成する。",
+    )
     args = parser.parse_args()
 
     JST = timezone(timedelta(hours=9))
+    now = datetime.now(JST)
 
-    if args.start:
-        try:
-            start_dt = datetime.fromisoformat(args.start)
-            if start_dt.tzinfo is None:
-                start_dt = start_dt.replace(tzinfo=JST)
-        except ValueError:
+    if args.instant:
+        # 即時配信: scheduledStartTime を設定しない（縦型ライブフィードに表示される）
+        title = f"【コメント参加型】バーチャル競馬LIVE {now.month}月{now.day}日"
+        scheduled_start_time = None
+        print(f"[INFO] 即時配信モード（縦型ライブフィード対応）", file=sys.stderr)
+        print(f"[INFO] 配信タイトル: {title}", file=sys.stderr)
+    else:
+        if args.start:
+            try:
+                start_dt = datetime.fromisoformat(args.start)
+                if start_dt.tzinfo is None:
+                    start_dt = start_dt.replace(tzinfo=JST)
+            except ValueError:
+                print(
+                    f"[ERROR] --start の形式が不正です: {args.start!r}\n"
+                    "ISO 8601 形式で指定してください。例: 2026-04-06T21:00:00+09:00",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+        else:
+            start_dt = now.replace(hour=19, minute=0, second=0, microsecond=0)
+
+        if start_dt <= now + timedelta(minutes=1):
+            adjusted = now + timedelta(minutes=1)
             print(
-                f"[ERROR] --start の形式が不正です: {args.start!r}\n"
-                "ISO 8601 形式で指定してください。例: 2026-04-06T21:00:00+09:00",
+                f"[INFO] 指定時刻({start_dt.strftime('%H:%M')})が過去または直近のため、"
+                f"{adjusted.strftime('%H:%M')} に自動調整します。",
                 file=sys.stderr,
             )
-            sys.exit(1)
-    else:
-        start_dt = datetime.now(JST).replace(hour=19, minute=0, second=0, microsecond=0)
+            start_dt = adjusted
 
-    now = datetime.now(JST)
-    if start_dt <= now + timedelta(minutes=1):
-        adjusted = now + timedelta(minutes=1)
-        print(
-            f"[INFO] 指定時刻({start_dt.strftime('%H:%M')})が過去または直近のため、"
-            f"{adjusted.strftime('%H:%M')} に自動調整します。",
-            file=sys.stderr,
-        )
-        start_dt = adjusted
-
-    title = f"【コメント参加型】バーチャル競馬LIVE {start_dt.month}月{start_dt.day}日"
-    scheduled_start_time = start_dt.isoformat()
-
-    print(f"[INFO] 配信タイトル: {title}", file=sys.stderr)
-    print(f"[INFO] 開始時刻: {scheduled_start_time}", file=sys.stderr)
+        title = f"【コメント参加型】バーチャル競馬LIVE {start_dt.month}月{start_dt.day}日"
+        scheduled_start_time = start_dt.isoformat()
+        print(f"[INFO] 配信タイトル: {title}", file=sys.stderr)
+        print(f"[INFO] 開始時刻: {scheduled_start_time}", file=sys.stderr)
 
     try:
         video_id, rtmp_server, stream_key = create_broadcast(title, scheduled_start_time)

@@ -11,7 +11,6 @@ set YOUTUBE_API_KEY=YOUR_YOUTUBE_API_KEY_HERE
 set OBS_PASSWORD=
 set GAME_FONT_PATH=
 set RACES=10
-set START_TIME=
 set PYTHON=python
 
 REM --- Move to script folder first so config.local.bat path is correct ---
@@ -67,21 +66,12 @@ if "%YOUTUBE_API_KEY%"=="YOUR_YOUTUBE_API_KEY_HERE" (
     goto :error
 )
 
-REM --- Determine start time ---
-if "%START_TIME%"=="" (
-    %PYTHON% calc_start_time.py
-    if errorlevel 1 ( echo [ERROR] Time calc failed. & goto :error )
-    set /p START_TIME=<_tmp_st.txt
-    del _tmp_st.txt 2>nul
-)
-echo [INFO] Start time: %START_TIME%
-
 echo.
 echo ========================================
-echo  Creating YouTube broadcast (vertical)...
+echo  Creating YouTube broadcast (vertical/instant)...
 echo ========================================
 
-for /f "delims=" %%i in ('%PYTHON% create_broadcast.py --start "%START_TIME%"') do set VIDEO_ID=%%i
+for /f "delims=" %%i in ('%PYTHON% create_broadcast.py --instant') do set VIDEO_ID=%%i
 
 if "%VIDEO_ID%"=="" (
     echo [ERROR] Broadcast creation failed.

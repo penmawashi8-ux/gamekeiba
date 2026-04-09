@@ -68,6 +68,7 @@ class OBSController:
             logger.info("[OBS ダミーモード] connect() 呼び出し")
             return True
 
+        print(f"[OBS] WebSocket 接続中... ({self.host}:{self.port})")
         try:
             self._client = obs.ReqClient(
                 host=self.host,
@@ -76,9 +77,17 @@ class OBSController:
                 timeout=5,
             )
             self._connected = True
+            print(f"[OBS] 接続成功")
             logger.info("OBS WebSocket に接続しました (%s:%d)", self.host, self.port)
             return True
         except Exception as e:
+            print(f"[OBS] 接続失敗: {e}")
+            print(f"[OBS] OBS が起動中か確認してください。")
+            print(f"[OBS] ツール -> WebSocketサーバー設定 -> 有効化 を確認してください。")
+            if self.password:
+                print(f"[OBS] パスワードが設定されています。OBS側のパスワードと一致するか確認してください。")
+            else:
+                print(f"[OBS] OBS_PASSWORD が未設定です。config.local.bat で設定してください。")
             logger.error("OBS WebSocket 接続失敗: %s", e)
             self._connected = False
             self._dummy_mode = True  # 接続失敗後はダミーモードに切り替え

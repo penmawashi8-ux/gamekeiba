@@ -990,7 +990,7 @@ class Game:
         dsp.fill(COL_BG)
 
         # ── ゲームコンテンツ（スケール済み）を中段に配置 ──
-        game_scaled = pygame.transform.scale(
+        game_scaled = pygame.transform.smoothscale(
             self.screen, (self._V_GAME_W, self._V_GAME_H))
         dsp.blit(game_scaled, (0, self._V_TOP_H))
 
