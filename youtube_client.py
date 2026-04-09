@@ -71,8 +71,8 @@ def parse_comment(channel_id: str, display_name: str,
     """
     # 全角→半角正規化（！→!、全角数字→半角、全角スペース→半角スペース）
     text = unicodedata.normalize("NFKC", text).strip()
-    # 先頭の@メンションを除去（例: "@Keiba_virtual 単勝 8 1000" → "単勝 8 1000"）
-    text = re.sub(r'^(@\S+\s*)+', '', text).strip()
+    # YouTubeが挿入するゼロ幅スペース等の不可視文字を除去
+    text = re.sub(r'[\u200b-\u200f\u202a-\u202e\ufeff\u00ad]', '', text).strip()
     # 「円」suffix を除去（例: 500円 → 500）
     text = text.replace("円", "")
 
@@ -86,9 +86,9 @@ def parse_comment(channel_id: str, display_name: str,
             timestamp=timestamp,
         )
 
-    # 単勝/複勝: !?（単勝?|複勝?）スペース?馬番 金額
-    # 受け付ける例: 単3 500 / 単勝3 500 / 単 3 500 / !単勝 3 500 / !単3 500
-    m = re.fullmatch(r"!?(?P<type>単勝?|複勝?) *(?P<horse>[1-8]) +(?P<amount>\d+)", text)
+    # 単勝/複勝: 先頭から一致（後続テキスト・絵文字があっても拾う）
+    # 受け付ける例: 単3 500 / 単勝3 500 / 単 3 500 / !単勝 3 500 / 単勝 8 1000 🎯
+    m = re.match(r"!?(?P<type>単勝?|複勝?) *(?P<horse>[1-8]) +(?P<amount>\d+)", text)
     if m:
         horse  = int(m.group("horse"))
         amount = (int(m.group("amount")) // 100) * 100  # 100円単位に切り捨て
