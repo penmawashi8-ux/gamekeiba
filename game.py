@@ -969,21 +969,22 @@ class Game:
     # 縦型モード: ゲーム画面を合成してバナーを追加
     # ──────────────────────────────────────────────
 
-    _V_TOP_H  = 50
-    _V_GAME_W = VERTICAL_W                              # 720
-    _V_GAME_H = SCREEN_H * VERTICAL_W // SCREEN_W      # 405（16:9維持）
-    _V_BOT_Y  = _V_TOP_H + _V_GAME_H                   # 455
-    _V_BOT_H  = VERTICAL_H - _V_BOT_Y                  # 825
+    _V_TOP_H  = 60                                      # 上部セーフエリア
+    _V_GAME_W = VERTICAL_W - 20                         # 700（左右10pxセーフエリア）
+    _V_GAME_H = SCREEN_H * _V_GAME_W // SCREEN_W        # 393（16:9維持）
+    _V_GAME_X = (VERTICAL_W - _V_GAME_W) // 2          # 10（中央揃え）
+    _V_BOT_Y  = _V_TOP_H + _V_GAME_H                   # 453
+    _V_BOT_H  = VERTICAL_H - _V_BOT_Y                  # 827
 
     def _composite_vertical(self):
-        """縦型: ゲーム面を720×405（16:9維持）にスケールし上下バナーと合成してdisplayへ転送"""
+        """縦型: ゲーム面を700×393（16:9維持・セーフエリアあり）にスケールし上下バナーと合成してdisplayへ転送"""
         dsp = self._display
         dsp.fill(COL_BG)
 
-        # ── ゲームコンテンツ（16:9を維持してスケール）──
+        # ── ゲームコンテンツ（16:9を維持・左右10pxセーフエリア確保）──
         game_scaled = pygame.transform.smoothscale(
             self.screen, (self._V_GAME_W, self._V_GAME_H))
-        dsp.blit(game_scaled, (0, self._V_TOP_H))
+        dsp.blit(game_scaled, (self._V_GAME_X, self._V_TOP_H))
 
         # ── 上バナー ──────────────────────────────────
         top_r = pygame.Rect(0, 0, VERTICAL_W, self._V_TOP_H)

@@ -71,6 +71,8 @@ def parse_comment(channel_id: str, display_name: str,
     """
     # 全角→半角正規化（！→!、全角数字→半角、全角スペース→半角スペース）
     text = unicodedata.normalize("NFKC", text).strip()
+    # 先頭の@メンションを除去（例: "@Keiba_virtual 単勝 8 1000" → "単勝 8 1000"）
+    text = re.sub(r'^(@\S+\s*)+', '', text).strip()
     # 「円」suffix を除去（例: 500円 → 500）
     text = text.replace("円", "")
 
