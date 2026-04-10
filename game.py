@@ -601,7 +601,9 @@ class Game:
             pass  # ヘッダーの色変化で表現済み
 
         # ── 左パネル: オッズ表 ────────────────────────────
-        left_rect = pygame.Rect(0, HEADER_H, LEFT_PANEL_W, SCREEN_H - HEADER_H)
+        # 縦型: 横幅いっぱいに展開
+        panel_w = SCREEN_W if self.vertical else LEFT_PANEL_W
+        left_rect = pygame.Rect(0, HEADER_H, panel_w, SCREEN_H - HEADER_H)
         _draw_panel(self.screen, left_rect, radius=0)
 
         lx = 12
@@ -614,15 +616,27 @@ class Game:
         win_odds  = self.betting_manager.get_win_odds()
         show_odds = self.betting_manager.get_show_odds()
 
-        # ── 列X座標（f_sm=28px基準、LEFT_PANEL_W=720に収まるよう配置）──
-        TX_NUM   = lx + 4     # 馬番バッジ（34×32px）
-        TX_NAME  = lx + 44    # 馬名（最大7文字）
-        TX_STARS = lx + 226   # 強さ★（5文字）
-        TX_STYLE = lx + 368   # 脚質略称（1文字）
-        TX_WIN   = lx + 408   # 単勝オッズ
-        TX_SHOW  = lx + 536   # 複勝オッズ
-        TABLE_W  = 660
-        ROW_H    = 40         # 1行の高さ
+        # ── 列X座標（縦型は横幅いっぱいに拡張・フォントも大きく）──
+        if self.vertical:
+            TX_NUM   = lx + 4
+            TX_NAME  = lx + 56
+            TX_STARS = lx + 496
+            TX_STYLE = lx + 706
+            TX_WIN   = lx + 796
+            TX_SHOW  = lx + 1006
+            TABLE_W  = 1230
+            ROW_H    = 50
+            row_font = self.f_md
+        else:
+            TX_NUM   = lx + 4     # 馬番バッジ（34×32px）
+            TX_NAME  = lx + 44    # 馬名（最大7文字）
+            TX_STARS = lx + 226   # 強さ★（5文字）
+            TX_STYLE = lx + 368   # 脚質略称（1文字）
+            TX_WIN   = lx + 408   # 単勝オッズ
+            TX_SHOW  = lx + 536   # 複勝オッズ
+            TABLE_W  = 660
+            ROW_H    = 40         # 1行の高さ
+            row_font = self.f_sm
 
         # テーブルヘッダー
         for label, tx in [
@@ -639,8 +653,9 @@ class Game:
             s_odds = show_odds.get(horse.number)
             row_y  = ly + 2
 
-            # 馬番カラーバッジ
-            badge = pygame.Rect(TX_NUM, row_y, 34, 32)
+            # 馬番カラーバッジ（縦型は少し大きめ）
+            badge_h = 40 if self.vertical else 32
+            badge = pygame.Rect(TX_NUM, row_y, 34, badge_h)
             pygame.draw.rect(self.screen, horse.color, badge, border_radius=4)
             ns = self.f_sm.render(str(horse.number), True,
                                   horse_num_text_color(horse.number))
@@ -649,9 +664,11 @@ class Game:
 
             # 馬名（幅に収まるよう動的にフォントを縮小）
             name_w = TX_STARS - TX_NAME - 4
+            name_fonts = ([self.f_md, self.f_sm, self.f_xs, self.f_xs2, self.f_xs3]
+                          if self.vertical else
+                          [self.f_sm, self.f_xs, self.f_xs2, self.f_xs3])
             self.screen.blit(
-                _fit_text(horse.name, COL_TEXT, name_w,
-                          [self.f_sm, self.f_xs, self.f_xs2, self.f_xs3]),
+                _fit_text(horse.name, COL_TEXT, name_w, name_fonts),
                 (TX_NAME, row_y + 2)
             )
 
@@ -659,7 +676,7 @@ class Game:
             star_col = COL_GOLD if horse.strength >= 4 \
                        else COL_DIM if horse.strength <= 2 else COL_YELLOW
             self.screen.blit(
-                self.f_sm.render(horse.stars, True, star_col), (TX_STARS, row_y + 2))
+                row_font.render(horse.stars, True, star_col), (TX_STARS, row_y + 2))
 
             # 脚質略称（色分け）
             style_col = {
@@ -667,7 +684,7 @@ class Game:
                 "差し": COL_GREEN_BR, "追い込み": COL_SILVER,
             }.get(horse.running_style, COL_TEXT)
             self.screen.blit(
-                self.f_sm.render(horse.style_short, True, style_col),
+                row_font.render(horse.style_short, True, style_col),
                 (TX_STYLE, row_y + 2))
 
             # 単勝オッズ
@@ -675,20 +692,20 @@ class Game:
                 dw = max(1.0, w_odds)
                 wc = COL_GREEN_BR if dw >= 5.0 else COL_YELLOW
                 self.screen.blit(
-                    self.f_sm.render(f"{dw:.1f}倍", True, wc), (TX_WIN, row_y + 2))
+                    row_font.render(f"{dw:.1f}倍", True, wc), (TX_WIN, row_y + 2))
             else:
                 self.screen.blit(
-                    self.f_sm.render("---", True, COL_DIM), (TX_WIN, row_y + 2))
+                    row_font.render("---", True, COL_DIM), (TX_WIN, row_y + 2))
 
             # 複勝オッズ
             if s_odds:
                 ds = max(1.0, s_odds)
                 sc = COL_GREEN_BR if ds >= 3.0 else COL_YELLOW
                 self.screen.blit(
-                    self.f_sm.render(f"{ds:.1f}倍", True, sc), (TX_SHOW, row_y + 2))
+                    row_font.render(f"{ds:.1f}倍", True, sc), (TX_SHOW, row_y + 2))
             else:
                 self.screen.blit(
-                    self.f_sm.render("---", True, COL_DIM), (TX_SHOW, row_y + 2))
+                    row_font.render("---", True, COL_DIM), (TX_SHOW, row_y + 2))
 
             ly += ROW_H
 
@@ -702,6 +719,10 @@ class Game:
         total     = win_pool + show_pool
         tot_s = self.f_sm.render(f"総売上: {total:,}円", True, COL_DIM)
         self.screen.blit(tot_s, (lx, SCREEN_H - tot_s.get_height() - 6))
+
+        # 縦型: 右パネル省略（コメントはバナー部分に表示）
+        if self.vertical:
+            return
 
         # ── 右パネル ─────────────────────────────────────
         right_x = LEFT_PANEL_W
@@ -1001,7 +1022,25 @@ class Game:
         pygame.draw.line(dsp, COL_BORDER,
                          (0, self._V_BOT_Y), (VERTICAL_W, self._V_BOT_Y), 2)
 
-        y = self._V_BOT_Y + 24
+        y = self._V_BOT_Y + 16
+
+        # 最新コメント
+        comment_title = self.f_md.render("最新コメント", True, COL_YELLOW)
+        dsp.blit(comment_title, (20, y))
+        y += comment_title.get_height() + 6
+        if self.recent_messages:
+            for msg in self.recent_messages[-3:]:  # 最新3件
+                max_chars = max(8, (VERTICAL_W - 40) // 20)
+                disp_msg = msg if len(msg) <= max_chars else msg[:max_chars - 1] + "…"
+                surf = self.f_sm.render(disp_msg, True, COL_TEXT)
+                dsp.blit(surf, (20, y))
+                y += surf.get_height() + 4
+        else:
+            surf = self.f_sm.render("コメントを待っています...", True, COL_DIM)
+            dsp.blit(surf, (20, y))
+            y += surf.get_height() + 4
+        pygame.draw.line(dsp, COL_BORDER, (20, y + 6), (VERTICAL_W - 20, y + 6), 1)
+        y += 22
 
         # 操作説明
         for text, font, col in [
