@@ -606,7 +606,7 @@ class Game:
         left_rect = pygame.Rect(0, HEADER_H, panel_w, SCREEN_H - HEADER_H)
         _draw_panel(self.screen, left_rect, radius=0)
 
-        lx = 12
+        lx = 24 if self.vertical else 12
         ly = HEADER_H + 10
 
         # タイトル
@@ -998,14 +998,24 @@ class Game:
     _V_BOT_H  = VERTICAL_H - _V_BOT_Y                  # 827
 
     def _composite_vertical(self):
-        """縦型: ゲーム面を700×393（16:9維持・セーフエリアあり）にスケールし上下バナーと合成してdisplayへ転送"""
+        """縦型: ゲーム面をスケールし上下バナーと合成してdisplayへ転送
+        馬券受付フェーズはオッズを大きく見せるためゲームエリアを拡大する"""
         dsp = self._display
         dsp.fill(COL_BG)
 
-        # ── ゲームコンテンツ（16:9を維持・左右10pxセーフエリア確保）──
-        game_scaled = pygame.transform.smoothscale(
-            self.screen, (self._V_GAME_W, self._V_GAME_H))
-        dsp.blit(game_scaled, (self._V_GAME_X, self._V_TOP_H))
+        # 馬券受付フェーズはゲームエリアを縦に拡大（オッズの視認性向上）
+        if self.phase == Phase.BETTING:
+            game_h = 520
+        else:
+            game_h = self._V_GAME_H  # 393（16:9維持）
+        game_w = self._V_GAME_W      # 700
+        game_x = self._V_GAME_X      # 10
+        bot_y  = self._V_TOP_H + game_h
+        bot_h  = VERTICAL_H - bot_y
+
+        # ── ゲームコンテンツ ──────────────────────────────────
+        game_scaled = pygame.transform.smoothscale(self.screen, (game_w, game_h))
+        dsp.blit(game_scaled, (game_x, self._V_TOP_H))
 
         # ── 上バナー ──────────────────────────────────
         top_r = pygame.Rect(0, 0, VERTICAL_W, self._V_TOP_H)
@@ -1017,12 +1027,12 @@ class Game:
                       (self._V_TOP_H - bs.get_height()) // 2))
 
         # ── 下バナー ──────────────────────────────────
-        bot_r = pygame.Rect(0, self._V_BOT_Y, VERTICAL_W, self._V_BOT_H)
+        bot_r = pygame.Rect(0, bot_y, VERTICAL_W, bot_h)
         pygame.draw.rect(dsp, (10, 20, 60), bot_r)
         pygame.draw.line(dsp, COL_BORDER,
-                         (0, self._V_BOT_Y), (VERTICAL_W, self._V_BOT_Y), 2)
+                         (0, bot_y), (VERTICAL_W, bot_y), 2)
 
-        y = self._V_BOT_Y + 16
+        y = bot_y + 16
 
         # 最新コメント
         comment_title = self.f_md.render("最新コメント", True, COL_YELLOW)
