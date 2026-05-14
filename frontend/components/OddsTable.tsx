@@ -50,7 +50,7 @@ export default function OddsTable({ horses, winOdds, showOdds, pools }: Props) {
                       {h.number}
                     </span>
                   </td>
-                  <td className="px-3 py-2 text-white font-medium">{h.name}</td>
+                  <td className="px-3 py-2 text-white font-medium whitespace-nowrap">{h.name}</td>
                   <td className="px-3 py-2 text-center">
                     <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${styleColor(h.running_style)}`}>
                       {h.running_style}

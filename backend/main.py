@@ -4,6 +4,8 @@ import asyncio
 import json
 import logging
 import os
+import sys
+import time
 from typing import Dict
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -67,12 +69,52 @@ class ConnManager:
 manager = ConnManager()
 engine: GameEngine = None   # type: ignore[assignment]
 
+MAX_RUNTIME_HOURS     = float(os.environ.get("MAX_RUNTIME_HOURS",     "0"))
+IDLE_SHUTDOWN_MINUTES = float(os.environ.get("IDLE_SHUTDOWN_MINUTES", "0"))
+
+_idle_since: float | None = None
+_had_users  = False
+
+
+def _on_user_connect():
+    global _idle_since, _had_users
+    _had_users = True
+    _idle_since = None
+
+
+def _on_user_disconnect():
+    global _idle_since
+    if manager.count == 0 and _had_users:
+        _idle_since = time.monotonic()
+
+
+async def _auto_shutdown():
+    if MAX_RUNTIME_HOURS <= 0:
+        return
+    await asyncio.sleep(MAX_RUNTIME_HOURS * 3600)
+    logger.info("MAX_RUNTIME_HOURS reached — shutting down")
+    sys.exit(0)
+
+
+async def _idle_shutdown_watcher():
+    if IDLE_SHUTDOWN_MINUTES <= 0:
+        return
+    while True:
+        await asyncio.sleep(30)
+        if _idle_since is not None:
+            elapsed_min = (time.monotonic() - _idle_since) / 60
+            if elapsed_min >= IDLE_SHUTDOWN_MINUTES:
+                logger.info("No users for %.0f min — shutting down", elapsed_min)
+                sys.exit(0)
+
 
 @app.on_event("startup")
 async def startup():
     global engine
     engine = GameEngine(manager.broadcast, manager.send)
     asyncio.create_task(engine.run())
+    asyncio.create_task(_auto_shutdown())
+    asyncio.create_task(_idle_shutdown_watcher())
     logger.info("Game engine started")
 
 
@@ -89,7 +131,6 @@ async def ws_endpoint(websocket: WebSocket):
     user_id: str = ""
 
     try:
-        # 最初のメッセージで join を待つ（30秒タイムアウト）
         raw = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
         msg = json.loads(raw)
 
@@ -102,9 +143,9 @@ async def ws_endpoint(websocket: WebSocket):
         user_id    = session_id if session_id else f"u_{name}"
 
         manager.add(user_id, websocket)
+        _on_user_connect()
         user = engine.users.get_or_create_user(user_id, name)
 
-        # ウェルカムメッセージ
         await websocket.send_text(json.dumps({
             "type":         "joined",
             "user_id":      user_id,
@@ -113,13 +154,9 @@ async def ws_endpoint(websocket: WebSocket):
             "online":       manager.count,
         }, ensure_ascii=False))
 
-        # 現在のゲーム状態を送信
         await websocket.send_text(json.dumps(engine.get_snapshot(), ensure_ascii=False))
-
-        # オンライン人数を全員に通知
         await manager.broadcast({"type": "online_update", "online": manager.count})
 
-        # メッセージループ
         while True:
             raw = await websocket.receive_text()
             await _handle_msg(websocket, user_id, name, json.loads(raw))
@@ -133,6 +170,7 @@ async def ws_endpoint(websocket: WebSocket):
     finally:
         if user_id:
             manager.remove(user_id)
+            _on_user_disconnect()
             await manager.broadcast({"type": "online_update", "online": manager.count})
 
 

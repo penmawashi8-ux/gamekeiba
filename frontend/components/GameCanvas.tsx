@@ -20,7 +20,6 @@ export default function GameCanvas({ phase, horses, positions, raceRanking, coun
   const animRef    = useRef<number>(0)
   const localAnimT = useRef<Record<string, number>>({})
 
-  // 最新のpropsをrefに保持 → animationループを再起動せずに最新値を参照できる
   const stateRef = useRef({ phase, horses, positions, raceRanking, countdown })
   useEffect(() => {
     stateRef.current = { phase, horses, positions, raceRanking, countdown }
@@ -46,7 +45,7 @@ export default function GameCanvas({ phase, horses, positions, raceRanking, coun
       const dt = Math.min((now - lastTime) / 1000, 0.1)
       lastTime = now
 
-      const { phase, horses, positions, raceRanking, countdown } = stateRef.current
+      const { phase, horses, positions, raceRanking } = stateRef.current
       const W      = canvas.width
       const H      = canvas.height
       const trackW = W - PAD_LEFT - PAD_RIGHT
@@ -97,26 +96,11 @@ export default function GameCanvas({ phase, horses, positions, raceRanking, coun
           ctx.fillStyle = 'rgba(255,255,255,0.85)'
           ctx.font = '11px sans-serif'
           ctx.textAlign = 'left'
-          ctx.fillText(h.name, PAD_LEFT + 58, y - 4)
+          ctx.fillText(h.name, PAD_LEFT + 76, y - 4)
           ctx.fillStyle = 'rgba(200,200,200,0.7)'
           ctx.font = '10px sans-serif'
-          ctx.fillText(`${h.running_style}  ${h.stars}`, PAD_LEFT + 58, y + 10)
+          ctx.fillText(`${h.running_style}  ${h.stars}`, PAD_LEFT + 76, y + 10)
         })
-        if (phase === 'betting' && countdown > 0) {
-          const mm = String(Math.floor(countdown / 60)).padStart(2, '0')
-          const ss = String(countdown % 60).padStart(2, '0')
-          const bw = 150, bh = 48
-          const bx = W / 2 - bw / 2, by = H / 2 - bh / 2
-          ctx.fillStyle = 'rgba(0,0,0,0.6)'
-          roundRect(ctx, bx, by, bw, bh, 10); ctx.fill()
-          ctx.fillStyle = '#fde047'
-          ctx.font = 'bold 26px monospace'
-          ctx.textAlign = 'center'
-          ctx.fillText(`${mm}:${ss}`, W / 2, H / 2 + 9)
-          ctx.fillStyle = 'rgba(200,200,200,0.8)'
-          ctx.font = '11px sans-serif'
-          ctx.fillText('馬券受付中', W / 2, H / 2 - 10)
-        }
       } else if (phase === 'racing') {
         horses.forEach((h, i) => {
           const pos = positions[String(h.number)]
