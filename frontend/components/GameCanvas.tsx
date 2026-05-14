@@ -92,14 +92,14 @@ export default function GameCanvas({ phase, horses, positions, raceRanking, coun
       if (phase === 'betting' || phase === 'waiting') {
         horses.forEach((h, i) => {
           const y = 10 + i * LANE_H + LANE_H / 2
-          drawHorse(ctx, PAD_LEFT + 22, y, h, 0)
+          drawHorse(ctx, PAD_LEFT + 44, y, h, 0)
           ctx.fillStyle = 'rgba(255,255,255,0.85)'
           ctx.font = '11px sans-serif'
           ctx.textAlign = 'left'
-          ctx.fillText(h.name, PAD_LEFT + 76, y - 4)
+          ctx.fillText(h.name, PAD_LEFT + 98, y - 4)
           ctx.fillStyle = 'rgba(200,200,200,0.7)'
           ctx.font = '10px sans-serif'
-          ctx.fillText(`${h.running_style}  ${h.stars}`, PAD_LEFT + 76, y + 10)
+          ctx.fillText(`${h.running_style}  ${h.stars}`, PAD_LEFT + 98, y + 10)
         })
       } else if (phase === 'racing') {
         horses.forEach((h, i) => {

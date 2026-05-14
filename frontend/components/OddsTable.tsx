@@ -52,8 +52,8 @@ export default function OddsTable({ horses, winOdds, showOdds, pools }: Props) {
                   </td>
                   <td className="px-3 py-2 text-white font-medium whitespace-nowrap">{h.name}</td>
                   <td className="px-3 py-2 text-center">
-                    <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${styleColor(h.running_style)}`}>
-                      {h.running_style}
+                    <span className={`text-xs px-1.5 py-0.5 rounded font-bold whitespace-nowrap ${styleColor(h.running_style)}`}>
+                      {styleShort(h.running_style)}
                     </span>
                   </td>
                   <td className="px-3 py-2 text-center text-yellow-400 text-xs tracking-tight">
@@ -88,6 +88,10 @@ function needsDark(hex: string): boolean {
   const g = parseInt(hex.slice(3, 5), 16)
   const b = parseInt(hex.slice(5, 7), 16)
   return (r * 299 + g * 587 + b * 114) / 1000 > 150
+}
+
+function styleShort(style: string): string {
+  return { '逃げ': '逃', '先行': '先', '差し': '差', '追い込み': '追' }[style] ?? style[0]
 }
 
 function styleColor(style: string): string {
