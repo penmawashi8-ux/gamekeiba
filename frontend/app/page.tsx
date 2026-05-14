@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useGameSocket } from '@/hooks/useGameSocket'
+import { useVersionCheck } from '@/hooks/useVersionCheck'
 import GameCanvas from '@/components/GameCanvas'
 import BettingPanel from '@/components/BettingPanel'
 import OddsTable from '@/components/OddsTable'
@@ -75,6 +76,7 @@ export default function Home() {
   const [playerName, setPlayerName] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'win' | 'lose' } | null>(null)
   const { game, user, connected, error, placeBet } = useGameSocket(playerName)
+  const updateAvailable = useVersionCheck()
 
   useEffect(() => {
     if (user.lastPayout == null) return
@@ -115,6 +117,16 @@ export default function Home() {
       </header>
       {error && (
         <div className="bg-red-950 border-b border-red-800 text-red-300 text-center py-2 text-sm px-4">{error}</div>
+      )}
+      {updateAvailable && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3
+          bg-blue-600 text-white text-sm font-medium px-5 py-3 rounded-xl shadow-xl">
+          <span>新しいバージョンがあります</span>
+          <button onClick={() => window.location.reload()}
+            className="bg-white text-blue-700 px-3 py-1 rounded-lg text-xs font-bold hover:bg-blue-50 active:scale-95 transition-all">
+            更新
+          </button>
+        </div>
       )}
       {toast && (
         <div className={`fixed top-14 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-xl shadow-xl text-sm font-bold
