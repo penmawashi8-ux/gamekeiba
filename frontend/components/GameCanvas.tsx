@@ -21,7 +21,7 @@ export default function GameCanvas({ phase, horses, positions, raceRanking, coun
   const localAnimT = useRef<Record<string, number>>({})
 
   useEffect(() => {
-    const canvas = canvasRef.current
+    const canvas = canvasRef.current as HTMLCanvasElement
     if (!canvas) return
     const ctx = canvas.getContext('2d')!
 
