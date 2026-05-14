@@ -93,7 +93,7 @@ async def _auto_shutdown():
         return
     await asyncio.sleep(MAX_RUNTIME_HOURS * 3600)
     logger.info("MAX_RUNTIME_HOURS reached — shutting down")
-    sys.exit(0)
+    os._exit(0)
 
 
 async def _idle_shutdown_watcher():
@@ -105,7 +105,7 @@ async def _idle_shutdown_watcher():
             elapsed_min = (time.monotonic() - _idle_since) / 60
             if elapsed_min >= IDLE_SHUTDOWN_MINUTES:
                 logger.info("No users for %.0f min — shutting down", elapsed_min)
-                sys.exit(0)
+                os._exit(0)
 
 
 @app.on_event("startup")
