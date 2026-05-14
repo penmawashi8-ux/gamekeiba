@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import random
 from typing import List, Dict, Optional, Callable, Awaitable
 
 from horse_engine import Horse, generate_race_horses, TRACK_LENGTH
@@ -13,6 +14,10 @@ logger = logging.getLogger(__name__)
 BETTING_SECONDS  = 60
 RESULTS_SECONDS  = 12
 RACE_DT          = 0.05   # 20 FPS でレースシミュレーション
+
+BOT_NAMES = ["CPU_アラシ", "CPU_カゼマル", "CPU_ホシカゲ", "CPU_タイヨウ", "CPU_ミカヅキ"]
+BOT_BET_THRESHOLD = 3000   # 総賭け金がこれ以下ならボットが参加
+BOT_COUNT = 4              # ボット数
 
 
 class GameEngine:
@@ -59,10 +64,18 @@ class GameEngine:
             h.setup_race()
 
         self.countdown = BETTING_SECONDS
+        bot_placed = False
         while self.countdown > 0:
             await self._broadcast(self._state_msg())
             await asyncio.sleep(1)
             self.countdown -= 1
+            # ボット投票: 残り30秒で総賭け金が少ない場合
+            if not bot_placed and self.countdown == BETTING_SECONDS // 2:
+                pools = self.betting.get_pools()
+                total = pools["win_total"] + pools["show_total"]
+                if total < BOT_BET_THRESHOLD:
+                    await self._place_bot_bets()
+                    bot_placed = True
 
     async def _racing_phase(self):
         self.phase = "racing"
@@ -179,6 +192,24 @@ class GameEngine:
         if self.phase == "results":
             return self._results_msg()
         return {"type": "game_state", "phase": "waiting"}
+
+    async def _place_bot_bets(self):
+        amounts = [100, 200, 500, 1000, 2000]
+        horse_nums = [h.number for h in self.horses]
+        for i in range(BOT_COUNT):
+            bot_id   = f"bot_{i}"
+            bot_name = BOT_NAMES[i % len(BOT_NAMES)]
+            bet_type = random.choice(["win", "show"])
+            horse    = random.choice(horse_nums)
+            amount   = random.choice(amounts)
+            self.betting.place_bet(bot_id, bot_name, bet_type, horse, amount)
+        await self._broadcast({
+            "type":      "odds_update",
+            "win_odds":  {str(k): v for k, v in self.betting.get_win_odds().items()},
+            "show_odds": {str(k): v for k, v in self.betting.get_show_odds().items()},
+            "pools":     self.betting.get_pools(),
+        })
+        logger.info("Bot bets placed (%d bots)", BOT_COUNT)
 
     # ── Actions ──────────────────────────────────────────────────────
 

@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import os
+import sys
 from typing import Dict
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -68,11 +69,23 @@ manager = ConnManager()
 engine: GameEngine = None   # type: ignore[assignment]
 
 
+MAX_RUNTIME_HOURS = float(os.environ.get("MAX_RUNTIME_HOURS", "0"))
+
+
+async def _auto_shutdown():
+    if MAX_RUNTIME_HOURS <= 0:
+        return
+    await asyncio.sleep(MAX_RUNTIME_HOURS * 3600)
+    logger.info("MAX_RUNTIME_HOURS reached — shutting down")
+    sys.exit(0)
+
+
 @app.on_event("startup")
 async def startup():
     global engine
     engine = GameEngine(manager.broadcast, manager.send)
     asyncio.create_task(engine.run())
+    asyncio.create_task(_auto_shutdown())
     logger.info("Game engine started")
 
 
