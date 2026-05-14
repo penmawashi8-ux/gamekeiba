@@ -11,9 +11,9 @@ interface Props {
   countdown: number
 }
 
-const LANE_H    = 52
-const PAD_LEFT  = 52
-const PAD_RIGHT = 44
+const LANE_H    = 38
+const PAD_LEFT  = 46
+const PAD_RIGHT = 42
 
 export default function GameCanvas({ phase, horses, positions, raceRanking, countdown }: Props) {
   const canvasRef  = useRef<HTMLCanvasElement>(null)
@@ -68,12 +68,12 @@ export default function GameCanvas({ phase, horses, positions, raceRanking, coun
         ctx.fillRect(PAD_LEFT, y, trackW, LANE_H - 1)
         ctx.fillStyle = h.color
         ctx.beginPath()
-        ctx.arc(26, y + LANE_H / 2, 16, 0, Math.PI * 2)
+        ctx.arc(23, y + LANE_H / 2, 13, 0, Math.PI * 2)
         ctx.fill()
         ctx.fillStyle = needsDark(h.color) ? '#000' : '#fff'
-        ctx.font = 'bold 13px sans-serif'
+        ctx.font = 'bold 11px sans-serif'
         ctx.textAlign = 'center'
-        ctx.fillText(String(h.number), 26, y + LANE_H / 2 + 5)
+        ctx.fillText(String(h.number), 23, y + LANE_H / 2 + 4)
       })
 
       ctx.strokeStyle = 'rgba(255,255,255,0.7)'
@@ -93,12 +93,12 @@ export default function GameCanvas({ phase, horses, positions, raceRanking, coun
         horses.forEach((h, i) => {
           const y = 10 + i * LANE_H + LANE_H / 2
           ctx.fillStyle = 'rgba(255,255,255,0.92)'
-          ctx.font = 'bold 12px sans-serif'
+          ctx.font = 'bold 11px sans-serif'
           ctx.textAlign = 'left'
-          ctx.fillText(h.name, PAD_LEFT + 8, y - 5)
+          ctx.fillText(h.name, PAD_LEFT + 6, y - 3)
           ctx.fillStyle = 'rgba(180,180,180,0.75)'
-          ctx.font = '10px sans-serif'
-          ctx.fillText(`${h.running_style}  ${h.stars}`, PAD_LEFT + 8, y + 10)
+          ctx.font = '9px sans-serif'
+          ctx.fillText(`${h.running_style}  ${h.stars}`, PAD_LEFT + 6, y + 9)
         })
       } else if (phase === 'racing') {
         horses.forEach((h, i) => {
@@ -111,9 +111,9 @@ export default function GameCanvas({ phase, horses, positions, raceRanking, coun
           if (pos.rank) {
             const rc = ['#fbbf24','#9ca3af','#d97706']
             ctx.fillStyle = rc[pos.rank - 1] ?? '#6b7280'
-            roundRect(ctx, W - PAD_RIGHT + 3, y - 11, 38, 22, 4); ctx.fill()
-            ctx.fillStyle = '#000'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'
-            ctx.fillText(`${pos.rank}着`, W - PAD_RIGHT + 22, y + 5)
+            roundRect(ctx, W - PAD_RIGHT + 2, y - 9, 36, 18, 3); ctx.fill()
+            ctx.fillStyle = '#000'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center'
+            ctx.fillText(`${pos.rank}着`, W - PAD_RIGHT + 20, y + 4)
           }
         })
         const fin = horses
@@ -136,9 +136,9 @@ export default function GameCanvas({ phase, horses, positions, raceRanking, coun
           if (rank >= 1 && rank <= 3) {
             const rc = ['#fbbf24','#9ca3af','#d97706']
             ctx.fillStyle = rc[rank - 1]
-            roundRect(ctx, W - PAD_RIGHT + 3, y - 11, 38, 22, 4); ctx.fill()
-            ctx.fillStyle = '#000'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'
-            ctx.fillText(`${rank}着`, W - PAD_RIGHT + 22, y + 5)
+            roundRect(ctx, W - PAD_RIGHT + 2, y - 9, 36, 18, 3); ctx.fill()
+            ctx.fillStyle = '#000'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center'
+            ctx.fillText(`${rank}着`, W - PAD_RIGHT + 20, y + 4)
           }
         })
       }
