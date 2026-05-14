@@ -69,11 +69,11 @@ class ConnManager:
 manager = ConnManager()
 engine: GameEngine = None   # type: ignore[assignment]
 
-MAX_RUNTIME_HOURS    = float(os.environ.get("MAX_RUNTIME_HOURS",    "0"))
+MAX_RUNTIME_HOURS     = float(os.environ.get("MAX_RUNTIME_HOURS",     "0"))
 IDLE_SHUTDOWN_MINUTES = float(os.environ.get("IDLE_SHUTDOWN_MINUTES", "0"))
 
-_idle_since: float | None = None   # time.monotonic() when count dropped to 0
-_had_users  = False                 # at least one user connected this session
+_idle_since: float | None = None
+_had_users  = False
 
 
 def _on_user_connect():
@@ -131,7 +131,6 @@ async def ws_endpoint(websocket: WebSocket):
     user_id: str = ""
 
     try:
-        # 最初のメッセージで join を待つ（30秒タイムアウト）
         raw = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
         msg = json.loads(raw)
 
@@ -147,7 +146,6 @@ async def ws_endpoint(websocket: WebSocket):
         _on_user_connect()
         user = engine.users.get_or_create_user(user_id, name)
 
-        # ウェルカムメッセージ
         await websocket.send_text(json.dumps({
             "type":         "joined",
             "user_id":      user_id,
@@ -156,13 +154,9 @@ async def ws_endpoint(websocket: WebSocket):
             "online":       manager.count,
         }, ensure_ascii=False))
 
-        # 現在のゲーム状態を送信
         await websocket.send_text(json.dumps(engine.get_snapshot(), ensure_ascii=False))
-
-        # オンライン人数を全員に通知
         await manager.broadcast({"type": "online_update", "online": manager.count})
 
-        # メッセージループ
         while True:
             raw = await websocket.receive_text()
             await _handle_msg(websocket, user_id, name, json.loads(raw))

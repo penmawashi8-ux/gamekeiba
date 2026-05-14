@@ -13,11 +13,11 @@ logger = logging.getLogger(__name__)
 
 BETTING_SECONDS  = 60
 RESULTS_SECONDS  = 12
-RACE_DT          = 0.05   # 20 FPS でレースシミュレーション
+RACE_DT          = 0.05
 
 BOT_NAMES = ["CPU_アラシ", "CPU_カゼマル", "CPU_ホシカゲ", "CPU_タイヨウ", "CPU_ミカヅキ"]
-BOT_BET_THRESHOLD = 3000   # 総賭け金がこれ以下ならボットが参加
-BOT_COUNT = 4              # ボット数
+BOT_BET_THRESHOLD = 3000
+BOT_COUNT = 4
 
 
 class GameEngine:
@@ -38,8 +38,6 @@ class GameEngine:
         self.race_number  = 0
         self._last_payouts: list = []
 
-    # ── Main loop ────────────────────────────────────────────────────
-
     async def run(self):
         while True:
             try:
@@ -51,8 +49,6 @@ class GameEngine:
             except Exception:
                 logger.exception("Game loop error")
                 await asyncio.sleep(5)
-
-    # ── Phases ───────────────────────────────────────────────────────
 
     async def _betting_phase(self):
         self.race_number += 1
@@ -69,7 +65,6 @@ class GameEngine:
             await self._broadcast(self._state_msg())
             await asyncio.sleep(1)
             self.countdown -= 1
-            # ボット投票: 残り30秒で総賭け金が少ない場合
             if not bot_placed and self.countdown == BETTING_SECONDS // 2:
                 pools = self.betting.get_pools()
                 total = pools["win_total"] + pools["show_total"]
@@ -101,17 +96,16 @@ class GameEngine:
             )
             self._last_payouts = [
                 {
-                    "user_id":      p.user_id,
-                    "display_name": p.display_name,
-                    "bet_type":     p.bet_type,
-                    "horse":        p.horse,
-                    "bet_amount":   p.bet_amount,
+                    "user_id":       p.user_id,
+                    "display_name":  p.display_name,
+                    "bet_type":      p.bet_type,
+                    "horse":         p.horse,
+                    "bet_amount":    p.bet_amount,
                     "payout_amount": p.payout_amount,
-                    "odds":         p.odds,
+                    "odds":          p.odds,
                 }
                 for p in payouts
             ]
-            # 各ユーザーへ払い戻し
             totals: Dict[str, int] = {}
             for p in payouts:
                 self.users.update_balance(p.user_id, p.payout_amount)
@@ -125,7 +119,6 @@ class GameEngine:
                     "balance": balance,
                 })
 
-        # 破産ユーザー復活
         for uid, name in self.users.restore_broke_users():
             await self._send_personal(uid, {
                 "type":    "restored",
@@ -139,8 +132,6 @@ class GameEngine:
             await self._broadcast({"type": "results_countdown", "countdown": self.countdown})
             await asyncio.sleep(1)
             self.countdown -= 1
-
-    # ── Message builders ─────────────────────────────────────────────
 
     def _state_msg(self) -> dict:
         return {
@@ -184,7 +175,6 @@ class GameEngine:
         }
 
     def get_snapshot(self) -> dict:
-        """新規接続ユーザー向けの現在状態スナップショット"""
         if self.phase == "betting":
             return self._state_msg()
         if self.phase == "racing":
@@ -211,8 +201,6 @@ class GameEngine:
         })
         logger.info("Bot bets placed (%d bots)", BOT_COUNT)
 
-    # ── Actions ──────────────────────────────────────────────────────
-
     async def handle_bet(
         self, user_id: str, display_name: str,
         bet_type: str, horse_num: int, amount: int
@@ -233,7 +221,6 @@ class GameEngine:
         new_balance = self.users.update_balance(user_id, -amount)
         self.betting.place_bet(user_id, display_name, bet_type, horse_num, amount)
 
-        # オッズ更新をブロードキャスト
         await self._broadcast({
             "type":      "odds_update",
             "win_odds":  {str(k): v for k, v in self.betting.get_win_odds().items()},
