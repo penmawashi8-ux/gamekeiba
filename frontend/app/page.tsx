@@ -79,6 +79,10 @@ export default function Home() {
   const updateAvailable = useVersionCheck()
 
   useEffect(() => {
+    if (window.location.search) history.replaceState(null, '', window.location.pathname)
+  }, [])
+
+  useEffect(() => {
     if (user.lastPayout == null) return
     setToast(user.lastPayout > 0
       ? { msg: `払い戻し ¥${user.lastPayout.toLocaleString()}`, type: 'win' }
@@ -122,7 +126,7 @@ export default function Home() {
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3
           bg-blue-600 text-white text-sm font-medium px-5 py-3 rounded-xl shadow-xl">
           <span>新しいバージョンがあります</span>
-          <button onClick={() => window.location.reload()}
+          <button onClick={() => { window.location.href = window.location.pathname + '?_v=' + Date.now() }}
             className="bg-white text-blue-700 px-3 py-1 rounded-lg text-xs font-bold hover:bg-blue-50 active:scale-95 transition-all">
             更新
           </button>
