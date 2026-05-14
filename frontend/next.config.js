@@ -2,7 +2,7 @@
 const nextConfig = {
   output: 'standalone',
   env: {
-    BUILD_ID: Date.now().toString(),
+    BUILD_ID: process.env.VERCEL_GIT_COMMIT_SHA || 'dev',
   },
 }
 

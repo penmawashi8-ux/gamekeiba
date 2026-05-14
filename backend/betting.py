@@ -51,14 +51,14 @@ class BettingManager:
         total = sum(self._win_pool.values())
         if total == 0:
             return {}
-        return {h: round(total * WIN_TAKEOUT / p, 1)
+        return {h: max(1.0, round(total * WIN_TAKEOUT / p, 1))
                 for h, p in self._win_pool.items() if p > 0}
 
     def get_show_odds(self) -> Dict[int, float]:
         total = sum(self._show_pool.values())
         if total == 0:
             return {}
-        return {h: round(total * SHOW_TAKEOUT / p, 1)
+        return {h: max(1.0, round(total * SHOW_TAKEOUT / p, 1))
                 for h, p in self._show_pool.items() if p > 0}
 
     def get_pools(self) -> dict:
