@@ -76,18 +76,20 @@ export default function GameCanvas({ phase, horses, positions, raceRanking, coun
         ctx.fillText(String(h.number), 23, y + LANE_H / 2 + 4)
       })
 
-      ctx.strokeStyle = 'rgba(255,255,255,0.7)'
-      ctx.setLineDash([6, 4])
-      ctx.lineWidth = 2
-      ctx.beginPath()
-      ctx.moveTo(PAD_LEFT + trackW, 10)
-      ctx.lineTo(PAD_LEFT + trackW, 10 + horses.length * LANE_H)
-      ctx.stroke()
-      ctx.setLineDash([])
-      ctx.fillStyle = 'rgba(255,255,255,0.7)'
-      ctx.font = '10px sans-serif'
-      ctx.textAlign = 'center'
-      ctx.fillText('GOAL', PAD_LEFT + trackW, 9)
+      if (phase !== 'racing') {
+        ctx.strokeStyle = 'rgba(255,255,255,0.7)'
+        ctx.setLineDash([6, 4])
+        ctx.lineWidth = 2
+        ctx.beginPath()
+        ctx.moveTo(PAD_LEFT + trackW, 10)
+        ctx.lineTo(PAD_LEFT + trackW, 10 + horses.length * LANE_H)
+        ctx.stroke()
+        ctx.setLineDash([])
+        ctx.fillStyle = 'rgba(255,255,255,0.7)'
+        ctx.font = '10px sans-serif'
+        ctx.textAlign = 'center'
+        ctx.fillText('GOAL', PAD_LEFT + trackW, 9)
+      }
 
       if (phase === 'betting' || phase === 'waiting') {
         horses.forEach((h, i) => {
@@ -101,21 +103,116 @@ export default function GameCanvas({ phase, horses, positions, raceRanking, coun
           ctx.fillText(`${h.running_style}  ${h.stars}`, PAD_LEFT + 6, y + 9)
         })
       } else if (phase === 'racing') {
+        // Camera follows the pack — zooms in to 60% of track width
+        const allProg = horses.map(h => positions[String(h.number)]?.progress ?? 0)
+        const leadProg = Math.max(...allProg, 0.02)
+        const VIEW = 0.6
+        const camStart = Math.max(0, Math.min(leadProg - VIEW * 0.75, 1 - VIEW))
+        const camScale = 1 / VIEW
+
+        // Scrolling ground lines for motion feel
+        const dashOff = -(now / 35) % 48
+        horses.forEach((_, i) => {
+          const ly = 10 + i * LANE_H + LANE_H / 2
+          ctx.strokeStyle = 'rgba(255,255,255,0.07)'
+          ctx.setLineDash([24, 24])
+          ctx.lineDashOffset = dashOff
+          ctx.lineWidth = 1
+          ctx.beginPath()
+          ctx.moveTo(PAD_LEFT, ly)
+          ctx.lineTo(PAD_LEFT + trackW, ly)
+          ctx.stroke()
+        })
+        ctx.setLineDash([])
+
+        // Finish line at camera-adjusted position
+        const finX = PAD_LEFT + (1.0 - camStart) * camScale * trackW
+        if (finX >= PAD_LEFT && finX <= W - PAD_RIGHT + 20) {
+          const fx = Math.min(finX, W - PAD_RIGHT)
+          ctx.strokeStyle = 'rgba(255,255,255,0.85)'
+          ctx.setLineDash([6, 4])
+          ctx.lineWidth = 2
+          ctx.beginPath()
+          ctx.moveTo(fx, 10)
+          ctx.lineTo(fx, 10 + horses.length * LANE_H)
+          ctx.stroke()
+          ctx.setLineDash([])
+          ctx.fillStyle = 'rgba(255,255,255,0.85)'
+          ctx.font = 'bold 10px sans-serif'
+          ctx.textAlign = 'center'
+          ctx.fillText('GOAL', fx, 9)
+        }
+
+        // Find current leader horse number
+        const leaderNum = horses.reduce((best, h) => {
+          const p = positions[String(h.number)]
+          const bp = positions[String(best)]
+          if (!p) return best
+          if (!bp) return h.number
+          if (p.finished && !bp.finished) return best
+          if (!p.finished && bp.finished) return h.number
+          if (p.rank && bp.rank) return p.rank < bp.rank ? h.number : best
+          return p.progress > bp.progress ? h.number : best
+        }, horses[0]?.number ?? 0)
+
+        // Clip drawing to track area
+        ctx.save()
+        ctx.beginPath()
+        ctx.rect(PAD_LEFT, 0, trackW, H)
+        ctx.clip()
+
         horses.forEach((h, i) => {
           const pos = positions[String(h.number)]
           if (!pos) return
           const y = 10 + i * LANE_H + LANE_H / 2
+          const screenX = PAD_LEFT + (pos.progress - camStart) * camScale * trackW
+          if (screenX < PAD_LEFT - 80 || screenX > W + 20) return
+
           if (!localAnimT.current[h.number]) localAnimT.current[h.number] = 0
-          if (!pos.finished) localAnimT.current[h.number] += dt * (1.5 + pos.progress * 0.5)
-          drawHorse(ctx, PAD_LEFT + pos.progress * trackW, y, h, localAnimT.current[h.number])
-          if (pos.rank) {
-            const rc = ['#fbbf24','#9ca3af','#d97706']
-            ctx.fillStyle = rc[pos.rank - 1] ?? '#6b7280'
-            roundRect(ctx, W - PAD_RIGHT + 2, y - 9, 36, 18, 3); ctx.fill()
-            ctx.fillStyle = '#000'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center'
-            ctx.fillText(`${pos.rank}着`, W - PAD_RIGHT + 20, y + 4)
+          if (!pos.finished) localAnimT.current[h.number] += dt * (3 + pos.progress * 2)
+
+          // Leader lane glow
+          if (h.number === leaderNum && !pos.finished) {
+            ctx.fillStyle = 'rgba(255,210,0,0.08)'
+            ctx.fillRect(PAD_LEFT, 10 + i * LANE_H, trackW, LANE_H - 1)
           }
+
+          // Speed lines behind horse
+          if (!pos.finished) {
+            const t = localAnimT.current[h.number]
+            ctx.lineWidth = 1.2
+            for (let si = 0; si < 5; si++) {
+              const phase = ((t * 2.5 + si * 0.55) % 1)
+              const ly = y - 9 + si * 4.5
+              const len = 18 + si * 7
+              ctx.globalAlpha = (1 - phase) * 0.35 * Math.min(1, pos.progress * 4)
+              ctx.strokeStyle = '#fff'
+              ctx.beginPath()
+              ctx.moveTo(screenX - len - phase * 35, ly)
+              ctx.lineTo(screenX - phase * 35, ly)
+              ctx.stroke()
+            }
+            ctx.globalAlpha = 1
+          }
+
+          drawHorse(ctx, screenX, y, h, localAnimT.current[h.number])
         })
+
+        ctx.restore()
+
+        // Rank badges (outside clip)
+        horses.forEach((h, i) => {
+          const pos = positions[String(h.number)]
+          if (!pos?.rank) return
+          const y = 10 + i * LANE_H + LANE_H / 2
+          const rc = ['#fbbf24','#9ca3af','#d97706']
+          ctx.fillStyle = rc[pos.rank - 1] ?? '#6b7280'
+          roundRect(ctx, W - PAD_RIGHT + 2, y - 9, 36, 18, 3); ctx.fill()
+          ctx.fillStyle = '#000'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center'
+          ctx.fillText(`${pos.rank}着`, W - PAD_RIGHT + 20, y + 4)
+        })
+
+        // Finished horses overlay
         const fin = horses
           .filter(h => positions[String(h.number)]?.finished)
           .sort((a, b) => (positions[String(a.number)]?.rank ?? 99) - (positions[String(b.number)]?.rank ?? 99))
