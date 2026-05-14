@@ -31,9 +31,8 @@ export default function GameCanvas({ phase, horses, positions, raceRanking, coun
     const ctx = canvas.getContext('2d')!
 
     function resize() {
-      const h = stateRef.current.horses
       canvas.width  = canvas.offsetWidth
-      canvas.height = Math.max(h.length * LANE_H + 20, 180)
+      canvas.height = canvas.offsetHeight
     }
     resize()
     const ro = new ResizeObserver(resize)
