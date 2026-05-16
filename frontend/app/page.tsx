@@ -72,7 +72,32 @@ function PhaseBar({ phase, countdown, raceNumber }: { phase: string; countdown: 
   )
 }
 
+function BrokeModal({ onReset, onDismiss }: { onReset: () => void; onDismiss: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-7 w-full max-w-xs shadow-2xl text-center">
+        <div className="text-4xl mb-3">💸</div>
+        <h2 className="text-white text-lg font-bold mb-1">所持金が尽きました</h2>
+        <p className="text-gray-400 text-sm mb-5">¥10,000 にリセットしますか？</p>
+        <div className="flex gap-3">
+          <button onClick={onDismiss}
+            className="flex-1 py-2.5 rounded-xl bg-gray-800 text-gray-300 text-sm font-semibold
+              hover:bg-gray-700 active:scale-95 transition-all">
+            このまま続ける
+          </button>
+          <button onClick={onReset}
+            className="flex-1 py-2.5 rounded-xl bg-yellow-400 text-black text-sm font-bold
+              hover:bg-yellow-300 active:scale-95 transition-all">
+            リセット
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const PLAYER_NAME_KEY = 'keiba_player_name'
+const BROKE_THRESHOLD = 100
 
 function getSavedPlayerName(): string | null {
   if (typeof window === 'undefined') return null
@@ -86,7 +111,8 @@ function savePlayerName(name: string) {
 export default function Home() {
   const [playerName, setPlayerName] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'win' | 'lose' } | null>(null)
-  const { game, user, connected, error, placeBet } = useGameSocket(playerName)
+  const [brokeAcknowledged, setBrokeAcknowledged] = useState(false)
+  const { game, user, connected, error, placeBet, requestRestore } = useGameSocket(playerName)
   const updateAvailable = useVersionCheck()
 
   useEffect(() => {
@@ -94,6 +120,12 @@ export default function Home() {
     const saved = getSavedPlayerName()
     if (saved) setPlayerName(saved)
   }, [])
+
+  useEffect(() => {
+    if (user.balance >= BROKE_THRESHOLD) setBrokeAcknowledged(false)
+  }, [user.balance])
+
+  const showBrokeModal = user.userId !== '' && user.balance < BROKE_THRESHOLD && !brokeAcknowledged
 
   const handleJoin = (name: string) => {
     savePlayerName(name)
@@ -103,6 +135,11 @@ export default function Home() {
   const handleChangeName = () => {
     localStorage.removeItem(PLAYER_NAME_KEY)
     setPlayerName(null)
+  }
+
+  const handleRestore = () => {
+    requestRestore()
+    setBrokeAcknowledged(true)
   }
 
   useEffect(() => {
@@ -123,6 +160,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
+      {showBrokeModal && <BrokeModal onReset={handleRestore} onDismiss={() => setBrokeAcknowledged(true)} />}
       <header className="sticky top-0 z-40 bg-gray-900/95 backdrop-blur border-b border-gray-800/80">
         <div className="max-w-5xl mx-auto px-3 py-2 flex items-center gap-3">
           <span className="text-lg">🏇</span>

@@ -177,7 +177,11 @@ export function useGameSocket(playerName: string | null) {
     send({ type: 'get_bets' })
   }, [send])
 
-  return { game, user, connected, error, placeBet, refreshBets }
+  const requestRestore = useCallback(() => {
+    send({ type: 'restore_request' })
+  }, [send])
+
+  return { game, user, connected, error, placeBet, refreshBets, requestRestore }
 }
 
 function parseOdds(raw: Record<string, number> | undefined): Record<string, number> {

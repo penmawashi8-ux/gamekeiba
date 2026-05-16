@@ -6,6 +6,7 @@ import logging
 import os
 import sys
 import time
+import uuid
 from typing import Dict
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -140,7 +141,7 @@ async def ws_endpoint(websocket: WebSocket):
 
         name       = str(msg.get("name", "名無し"))[:20].strip() or "名無し"
         session_id = str(msg.get("session_id", ""))[:36]
-        user_id    = session_id if session_id else f"u_{name}"
+        user_id    = session_id if session_id else str(uuid.uuid4())
 
         manager.add(user_id, websocket)
         _on_user_connect()
@@ -204,6 +205,11 @@ async def _handle_msg(ws: WebSocket, user_id: str, display_name: str, msg: dict)
             "bets": [{"bet_type": b.bet_type, "horse": b.horse, "amount": b.amount}
                      for b in bets],
         }, ensure_ascii=False))
+
+    elif t == "restore_request":
+        balance = engine.users.restore_user(user_id)
+        if balance is not None:
+            await ws.send_text(json.dumps({"type": "restored", "balance": balance}, ensure_ascii=False))
 
     elif t == "ping":
         await ws.send_text(json.dumps({"type": "pong"}, ensure_ascii=False))

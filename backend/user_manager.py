@@ -126,6 +126,26 @@ class UserManager:
             finally:
                 conn.close()
 
+    def restore_user(self, user_id: str) -> Optional[int]:
+        """残高がBROKE_THRESHOLD未満のユーザーを即時リセット（手動リクエスト用）"""
+        with self._lock:
+            conn = self._connect()
+            try:
+                row = conn.execute(
+                    "SELECT balance FROM users WHERE user_id = ?", (user_id,)
+                ).fetchone()
+                if row is None or row[0] >= BROKE_THRESHOLD:
+                    return None
+                now = datetime.now().isoformat()
+                conn.execute(
+                    "UPDATE users SET balance = ?, updated_at = ?, broke_at = NULL WHERE user_id = ?",
+                    (INITIAL_BALANCE, now, user_id)
+                )
+                conn.commit()
+                return INITIAL_BALANCE
+            finally:
+                conn.close()
+
     def get_ranking(self, limit: int = 5) -> List[Tuple[str, int]]:
         with self._lock:
             conn = self._connect()
