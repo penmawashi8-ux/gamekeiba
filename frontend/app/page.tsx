@@ -72,6 +72,17 @@ function PhaseBar({ phase, countdown, raceNumber }: { phase: string; countdown: 
   )
 }
 
+const PLAYER_NAME_KEY = 'keiba_player_name'
+
+function getSavedPlayerName(): string | null {
+  if (typeof window === 'undefined') return null
+  return localStorage.getItem(PLAYER_NAME_KEY)
+}
+
+function savePlayerName(name: string) {
+  localStorage.setItem(PLAYER_NAME_KEY, name)
+}
+
 export default function Home() {
   const [playerName, setPlayerName] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'win' | 'lose' } | null>(null)
@@ -80,7 +91,19 @@ export default function Home() {
 
   useEffect(() => {
     if (window.location.search) history.replaceState(null, '', window.location.pathname)
+    const saved = getSavedPlayerName()
+    if (saved) setPlayerName(saved)
   }, [])
+
+  const handleJoin = (name: string) => {
+    savePlayerName(name)
+    setPlayerName(name)
+  }
+
+  const handleChangeName = () => {
+    localStorage.removeItem(PLAYER_NAME_KEY)
+    setPlayerName(null)
+  }
 
   useEffect(() => {
     if (user.lastPayout == null) return
@@ -92,7 +115,7 @@ export default function Home() {
     return () => clearTimeout(t)
   }, [user.lastPayout])
 
-  if (!playerName) return <LoginScreen onJoin={setPlayerName} />
+  if (!playerName) return <LoginScreen onJoin={handleJoin} />
 
   const isBetting = game.phase === 'betting'
   const isRacing  = game.phase === 'racing'
@@ -112,7 +135,10 @@ export default function Home() {
               {game.online}人
             </span>
             <div className="text-right">
-              <div className="text-gray-400 text-xs leading-none mb-0.5">{user.displayName}</div>
+              <button onClick={handleChangeName}
+                className="text-gray-400 text-xs leading-none mb-0.5 hover:text-gray-200 transition-colors cursor-pointer">
+                {user.displayName}
+              </button>
               <div className="text-yellow-300 font-mono font-bold text-sm leading-none">¥{user.balance.toLocaleString()}</div>
             </div>
             <div className={`w-2 h-2 rounded-full shrink-0 ${connected ? 'bg-green-400' : 'bg-red-500'}`} />
