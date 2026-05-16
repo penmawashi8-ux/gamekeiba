@@ -194,15 +194,18 @@ class GameEngine:
             bot_id   = f"bot_{i}"
             bot_name = BOT_NAMES[i % len(BOT_NAMES)]
             horse    = random.choices(self.horses, weights=strength_weights, k=1)[0]
-            # 強い馬(4-5)は単勝寄り、弱い馬(1-2)は複勝寄り
+            amount   = random.choice(amounts)
             if horse.strength >= 4:
-                bet_type = random.choices(["win", "show"], weights=[3, 1], k=1)[0]
+                # 強い馬は単勝・複勝の両方を必ず購入
+                self.betting.place_bet(bot_id, bot_name, "win",  horse.number, amount)
+                self.betting.place_bet(bot_id, bot_name, "show", horse.number, amount)
             elif horse.strength <= 2:
+                # 弱い馬は複勝寄り
                 bet_type = random.choices(["win", "show"], weights=[1, 3], k=1)[0]
+                self.betting.place_bet(bot_id, bot_name, bet_type, horse.number, amount)
             else:
                 bet_type = random.choice(["win", "show"])
-            amount   = random.choice(amounts)
-            self.betting.place_bet(bot_id, bot_name, bet_type, horse.number, amount)
+                self.betting.place_bet(bot_id, bot_name, bet_type, horse.number, amount)
         await self._broadcast({
             "type":      "odds_update",
             "win_odds":  {str(k): v for k, v in self.betting.get_win_odds().items()},
