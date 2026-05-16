@@ -15,9 +15,12 @@ BETTING_SECONDS  = 60
 RESULTS_SECONDS  = 12
 RACE_DT          = 0.05
 
-BOT_NAMES = ["CPU_アラシ", "CPU_カゼマル", "CPU_ホシカゲ", "CPU_タイヨウ", "CPU_ミカヅキ"]
-BOT_BET_THRESHOLD = 3000
-BOT_COUNT = 4
+BOT_NAMES = [
+    "CPU_アラシ", "CPU_カゼマル", "CPU_ホシカゲ", "CPU_タイヨウ", "CPU_ミカヅキ",
+    "CPU_ナミカゼ", "CPU_イナヅマ", "CPU_フウジン", "CPU_カミナリ", "CPU_ツムジ",
+]
+BOT_BET_THRESHOLD = 300000
+BOT_COUNT = 400
 
 
 class GameEngine:
@@ -185,14 +188,21 @@ class GameEngine:
 
     async def _place_bot_bets(self):
         amounts = [100, 200, 500, 1000, 2000]
-        horse_nums = [h.number for h in self.horses]
+        # 強さに比例した重み（強い馬ほど選ばれやすい）
+        strength_weights = [h.strength for h in self.horses]
         for i in range(BOT_COUNT):
             bot_id   = f"bot_{i}"
             bot_name = BOT_NAMES[i % len(BOT_NAMES)]
-            bet_type = random.choice(["win", "show"])
-            horse    = random.choice(horse_nums)
+            horse    = random.choices(self.horses, weights=strength_weights, k=1)[0]
+            # 強い馬(4-5)は単勝寄り、弱い馬(1-2)は複勝寄り
+            if horse.strength >= 4:
+                bet_type = random.choices(["win", "show"], weights=[3, 1], k=1)[0]
+            elif horse.strength <= 2:
+                bet_type = random.choices(["win", "show"], weights=[1, 3], k=1)[0]
+            else:
+                bet_type = random.choice(["win", "show"])
             amount   = random.choice(amounts)
-            self.betting.place_bet(bot_id, bot_name, bet_type, horse, amount)
+            self.betting.place_bet(bot_id, bot_name, bet_type, horse.number, amount)
         await self._broadcast({
             "type":      "odds_update",
             "win_odds":  {str(k): v for k, v in self.betting.get_win_odds().items()},
