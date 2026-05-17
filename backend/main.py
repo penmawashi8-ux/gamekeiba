@@ -69,12 +69,52 @@ class ConnManager:
 manager = ConnManager()
 engine: GameEngine = None   # type: ignore[assignment]
 
+MAX_RUNTIME_HOURS     = float(os.environ.get("MAX_RUNTIME_HOURS",     "0"))
+IDLE_SHUTDOWN_MINUTES = float(os.environ.get("IDLE_SHUTDOWN_MINUTES", "0"))
+
+_idle_since: float | None = None
+_had_users  = False
+
+
+def _on_user_connect():
+    global _idle_since, _had_users
+    _had_users = True
+    _idle_since = None
+
+
+def _on_user_disconnect():
+    global _idle_since
+    if manager.count == 0 and _had_users:
+        _idle_since = time.monotonic()
+
+
+async def _auto_shutdown():
+    if MAX_RUNTIME_HOURS <= 0:
+        return
+    await asyncio.sleep(MAX_RUNTIME_HOURS * 3600)
+    logger.info("MAX_RUNTIME_HOURS reached — shutting down")
+    os._exit(0)
+
+
+async def _idle_shutdown_watcher():
+    if IDLE_SHUTDOWN_MINUTES <= 0:
+        return
+    while True:
+        await asyncio.sleep(30)
+        if _idle_since is not None:
+            elapsed_min = (time.monotonic() - _idle_since) / 60
+            if elapsed_min >= IDLE_SHUTDOWN_MINUTES:
+                logger.info("No users for %.0f min — shutting down", elapsed_min)
+                os._exit(0)
+
 
 @app.on_event("startup")
 async def startup():
     global engine
     engine = GameEngine(manager.broadcast, manager.send)
     asyncio.create_task(engine.run())
+    asyncio.create_task(_auto_shutdown())
+    asyncio.create_task(_idle_shutdown_watcher())
     logger.info("Game engine started")
 
 
