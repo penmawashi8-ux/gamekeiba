@@ -103,6 +103,7 @@ async def ws_endpoint(websocket: WebSocket):
         user_id    = session_id if session_id else str(uuid.uuid4())
 
         manager.add(user_id, websocket)
+        _on_user_connect()
         user = engine.users.get_or_create_user(user_id, name)
 
         await websocket.send_text(json.dumps({
@@ -129,6 +130,7 @@ async def ws_endpoint(websocket: WebSocket):
     finally:
         if user_id:
             manager.remove(user_id)
+            _on_user_disconnect()
             await manager.broadcast({"type": "online_update", "online": manager.count})
 
 
