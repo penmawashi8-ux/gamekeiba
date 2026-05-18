@@ -125,7 +125,16 @@ export default function Home() {
     if (user.balance >= BROKE_THRESHOLD) setBrokeAcknowledged(false)
   }, [user.balance])
 
-  const showBrokeModal = user.userId !== '' && user.balance < BROKE_THRESHOLD && !brokeAcknowledged
+  // レースが変わるたびにリセット可能にする
+  useEffect(() => {
+    setBrokeAcknowledged(false)
+  }, [game.raceNumber])
+
+  // ベッティング中に馬券を買った直後は出さない
+  const showBrokeModal = user.userId !== ''
+    && user.balance < BROKE_THRESHOLD
+    && !brokeAcknowledged
+    && (game.phase !== 'betting' || user.myBets.length === 0)
 
   const handleJoin = (name: string) => {
     savePlayerName(name)
