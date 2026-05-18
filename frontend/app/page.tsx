@@ -125,16 +125,16 @@ export default function Home() {
     if (user.balance >= BROKE_THRESHOLD) setBrokeAcknowledged(false)
   }, [user.balance])
 
-  // レースが変わるたびにリセット可能にする
+  // 結果フェーズに入ったタイミングでリセット（次のレースで再度チェック）
   useEffect(() => {
-    setBrokeAcknowledged(false)
-  }, [game.raceNumber])
+    if (game.phase === 'results') setBrokeAcknowledged(false)
+  }, [game.phase])
 
-  // ベッティング中に馬券を買った直後は出さない
+  // 結果確定時に残高が100円未満の場合のみ表示
   const showBrokeModal = user.userId !== ''
     && user.balance < BROKE_THRESHOLD
     && !brokeAcknowledged
-    && (game.phase !== 'betting' || user.myBets.length === 0)
+    && game.phase === 'results'
 
   const handleJoin = (name: string) => {
     savePlayerName(name)
