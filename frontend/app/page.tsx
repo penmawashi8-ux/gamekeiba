@@ -112,7 +112,7 @@ export default function Home() {
   const [playerName, setPlayerName] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'win' | 'lose' } | null>(null)
   const [brokeAcknowledged, setBrokeAcknowledged] = useState(false)
-  const { game, user, connected, error, restoreError, placeBet, requestRestore } = useGameSocket(playerName)
+  const { game, user, connected, error, restoreError, payoutSettled, placeBet, requestRestore } = useGameSocket(playerName)
   const updateAvailable = useVersionCheck()
 
   useEffect(() => {
@@ -125,12 +125,13 @@ export default function Home() {
     if (user.balance >= BROKE_THRESHOLD) setBrokeAcknowledged(false)
   }, [user.balance])
 
-  // 結果フェーズに入ったタイミングでリセット（次のレースで再度チェック）
+  // 払い戻し確定後（payoutSettled）に残高チェック → 100円未満なら表示可能にする
+  // 馬券を買っていないレースは results フェーズ開始時にチェック
   useEffect(() => {
     if (game.phase === 'results') setBrokeAcknowledged(false)
-  }, [game.phase])
+  }, [payoutSettled, game.phase])
 
-  // 結果確定時に残高が100円未満の場合のみ表示
+  // 結果フェーズ中のみ表示
   const showBrokeModal = user.userId !== ''
     && user.balance < BROKE_THRESHOLD
     && !brokeAcknowledged

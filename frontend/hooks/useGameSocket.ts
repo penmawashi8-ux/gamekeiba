@@ -51,6 +51,7 @@ export function useGameSocket(playerName: string | null) {
   const [connected, setConnected]       = useState(false)
   const [error, setError]               = useState<string | null>(null)
   const [restoreError, setRestoreError] = useState<string | null>(null)
+  const [payoutSettled, setPayoutSettled] = useState(false)
 
   const send = useCallback((msg: object) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -108,10 +109,11 @@ export function useGameSocket(playerName: string | null) {
               positions: {},
               raceRanking: [],
             }))
-            // レース番号が変わったときだけ馬券をリセット
+            // レース番号が変わったときだけ馬券・払い戻し状態をリセット
             if (msg.race_number && msg.race_number !== lastRaceRef.current) {
               lastRaceRef.current = msg.race_number
               setUser(u => ({ ...u, myBets: [], lastPayout: null }))
+              setPayoutSettled(false)
             }
             break
 
@@ -166,6 +168,7 @@ export function useGameSocket(playerName: string | null) {
 
           case 'payout_notify':
             setUser(u => ({ ...u, balance: msg.balance, lastPayout: msg.payout }))
+            setPayoutSettled(true)
             break
 
           case 'restored':
@@ -219,7 +222,7 @@ export function useGameSocket(playerName: string | null) {
     send({ type: 'restore_request' })
   }, [send])
 
-  return { game, user, connected, error, restoreError, placeBet, refreshBets, requestRestore }
+  return { game, user, connected, error, restoreError, payoutSettled, placeBet, refreshBets, requestRestore }
 }
 
 function parseOdds(raw: Record<string, number> | undefined): Record<string, number> {
