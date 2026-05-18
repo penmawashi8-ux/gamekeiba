@@ -69,11 +69,8 @@ class GameEngine:
             await asyncio.sleep(1)
             self.countdown -= 1
             if not bot_placed and self.countdown == BETTING_SECONDS // 2:
-                pools = self.betting.get_pools()
-                total = pools["win_total"] + pools["show_total"]
-                if total < BOT_BET_THRESHOLD:
-                    await self._place_bot_bets()
-                    bot_placed = True
+                await self._place_bot_bets()
+                bot_placed = True
 
     async def _racing_phase(self):
         self.phase = "racing"
@@ -222,8 +219,8 @@ class GameEngine:
             return {"ok": False, "error": "馬券受付中ではありません"}
         if horse_num < 1 or horse_num > len(self.horses):
             return {"ok": False, "error": f"馬番は1〜{len(self.horses)}で指定してください"}
-        if amount < 100 or amount > 100_000:
-            return {"ok": False, "error": "賭け金は100〜100,000円で指定してください"}
+        if amount < 100 or amount > 10_000_000:
+            return {"ok": False, "error": "賭け金は100〜10,000,000円で指定してください"}
 
         balance = self.users.get_balance(user_id)
         if balance is None:

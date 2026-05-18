@@ -44,11 +44,13 @@ export function useGameSocket(playerName: string | null) {
   const retryRef     = useRef<ReturnType<typeof setTimeout> | null>(null)
   const retryCount   = useRef(0)
   const destroyed    = useRef(false)
+  const lastRaceRef  = useRef(0)
 
-  const [game, setGame]           = useState<GameState>(DEFAULT_GAME)
-  const [user, setUser]           = useState<UserState>(DEFAULT_USER)
-  const [connected, setConnected] = useState(false)
-  const [error, setError]         = useState<string | null>(null)
+  const [game, setGame]                 = useState<GameState>(DEFAULT_GAME)
+  const [user, setUser]                 = useState<UserState>(DEFAULT_USER)
+  const [connected, setConnected]       = useState(false)
+  const [error, setError]               = useState<string | null>(null)
+  const [restoreError, setRestoreError] = useState<string | null>(null)
 
   const send = useCallback((msg: object) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -106,7 +108,11 @@ export function useGameSocket(playerName: string | null) {
               positions: {},
               raceRanking: [],
             }))
-            setUser(u => ({ ...u, myBets: [], lastPayout: null }))
+            // レース番号が変わったときだけ馬券をリセット
+            if (msg.race_number && msg.race_number !== lastRaceRef.current) {
+              lastRaceRef.current = msg.race_number
+              setUser(u => ({ ...u, myBets: [], lastPayout: null }))
+            }
             break
 
           case 'race_update':
@@ -166,6 +172,11 @@ export function useGameSocket(playerName: string | null) {
             setUser(u => ({ ...u, balance: msg.balance }))
             break
 
+          case 'restore_denied':
+            setRestoreError(msg.error ?? 'リセットできません')
+            setTimeout(() => setRestoreError(null), 3000)
+            break
+
           case 'my_bets':
             setUser(u => ({ ...u, myBets: msg.bets ?? [] }))
             break
@@ -208,7 +219,7 @@ export function useGameSocket(playerName: string | null) {
     send({ type: 'restore_request' })
   }, [send])
 
-  return { game, user, connected, error, placeBet, refreshBets, requestRestore }
+  return { game, user, connected, error, restoreError, placeBet, refreshBets, requestRestore }
 }
 
 function parseOdds(raw: Record<string, number> | undefined): Record<string, number> {

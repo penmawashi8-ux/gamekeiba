@@ -118,7 +118,6 @@ export default function BettingPanel({ horses, winOdds, showOdds, user, onBet, d
           <input
             type="number"
             min={100}
-            max={100000}
             step={100}
             value={amount}
             onChange={e => setAmount(Math.max(0, parseInt(e.target.value) || 0))}

@@ -112,7 +112,7 @@ export default function Home() {
   const [playerName, setPlayerName] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'win' | 'lose' } | null>(null)
   const [brokeAcknowledged, setBrokeAcknowledged] = useState(false)
-  const { game, user, connected, error, placeBet, requestRestore } = useGameSocket(playerName)
+  const { game, user, connected, error, restoreError, placeBet, requestRestore } = useGameSocket(playerName)
   const updateAvailable = useVersionCheck()
 
   useEffect(() => {
@@ -200,6 +200,11 @@ export default function Home() {
         <div className={`fixed top-14 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-xl shadow-xl text-sm font-bold
           ${toast.type === 'win' ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-300'}`}>
           {toast.msg}
+        </div>
+      )}
+      {restoreError && (
+        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-xl shadow-xl text-sm font-bold bg-red-700 text-white">
+          {restoreError}
         </div>
       )}
       <main className="max-w-5xl mx-auto p-3 space-y-3">

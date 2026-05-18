@@ -206,6 +206,12 @@ async def _handle_msg(ws: WebSocket, user_id: str, display_name: str, msg: dict)
         }, ensure_ascii=False))
 
     elif t == "restore_request":
+        if engine.phase == "betting" and engine.betting.get_bets_by_user(user_id):
+            await ws.send_text(json.dumps(
+                {"type": "restore_denied", "error": "馬券購入中はリセットできません"},
+                ensure_ascii=False
+            ))
+            return
         balance = engine.users.restore_user(user_id)
         if balance is not None:
             await ws.send_text(json.dumps({"type": "restored", "balance": balance}, ensure_ascii=False))
