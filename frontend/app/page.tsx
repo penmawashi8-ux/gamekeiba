@@ -72,6 +72,29 @@ function PhaseBar({ phase, countdown, raceNumber }: { phase: string; countdown: 
   )
 }
 
+const NIGHT_START_JST = 1
+const NIGHT_END_JST   = 8
+
+function isNightJST(): boolean {
+  const jstHour = new Date(Date.now() + 9 * 3600 * 1000).getUTCHours()
+  return jstHour >= NIGHT_START_JST && jstHour < NIGHT_END_JST
+}
+
+function NightScreen() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-950 px-4">
+      <div className="text-center">
+        <div className="text-7xl mb-6">🌙</div>
+        <h1 className="text-white text-2xl font-bold mb-2">おやすみ中</h1>
+        <p className="text-gray-400 text-sm mb-1">現在サーバーはお休みしています</p>
+        <p className="text-gray-500 text-xs">
+          毎日 {NIGHT_END_JST}:00 〜 翌 {NIGHT_START_JST}:00（JST）に営業しています
+        </p>
+      </div>
+    </div>
+  )
+}
+
 function BrokeModal({ onReset, onDismiss }: { onReset: () => void; onDismiss: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
@@ -112,7 +135,15 @@ export default function Home() {
   const [playerName, setPlayerName] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'win' | 'lose' } | null>(null)
   const [brokeAcknowledged, setBrokeAcknowledged] = useState(false)
+  const [isNight, setIsNight] = useState(false)
   const { game, user, connected, error, restoreError, payoutSettled, placeBet, requestRestore } = useGameSocket(playerName)
+
+  useEffect(() => {
+    const check = () => setIsNight(isNightJST())
+    check()
+    const t = setInterval(check, 60_000)
+    return () => clearInterval(t)
+  }, [])
   const updateAvailable = useVersionCheck()
 
   useEffect(() => {
@@ -162,6 +193,7 @@ export default function Home() {
     return () => clearTimeout(t)
   }, [user.lastPayout])
 
+  if (isNight && !connected) return <NightScreen />
   if (!playerName) return <LoginScreen onJoin={handleJoin} />
 
   const isBetting = game.phase === 'betting'

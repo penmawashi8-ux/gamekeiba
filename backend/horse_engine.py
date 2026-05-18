@@ -65,29 +65,31 @@ class Horse:
         progress = min(1.0, self.x / TRACK_LENGTH)
         s = self.running_style
         if s == "逃げ":
-            if progress < 0.30:
-                return 1.10
+            # 前半強い、後半急激に落ちる / 平均 ≈ 1.00
+            if progress < 0.25:
+                return 1.20
             elif progress < 0.60:
-                return 1.10 - (progress - 0.30) * 0.933
+                return 1.20 - (progress - 0.25) / 0.35 * 0.35   # 1.20 → 0.85
             else:
-                return max(0.62, 0.82 - (progress - 0.60) * 1.00)
+                return 0.85 - (progress - 0.60) / 0.40 * 0.13   # 0.85 → 0.72
         elif s == "先行":
-            if progress < 0.5:
-                return 1.10
+            # 前半やや速い、後半わずかに落ちる / 平均 ≈ 1.00
+            if progress < 0.50:
+                return 1.04
             else:
-                return max(0.90, 1.10 - (progress - 0.5) * 0.40)
+                return 1.04 - (progress - 0.50) / 0.50 * 0.10   # 1.04 → 0.94
         elif s == "差し":
-            if progress < 0.55:
-                return 0.80
-            elif progress < 0.70:
-                return 0.80 + (progress - 0.55) * 1.60
+            # 前半抑えて後半伸びる / 平均 ≈ 1.00
+            if progress < 0.50:
+                return 0.82
             else:
-                return 1.04 + (progress - 0.70) * 1.80
+                return 0.82 + (progress - 0.50) / 0.50 * 0.72   # 0.82 → 1.54
         else:  # 追い込み
-            if progress < 0.62:
-                return 0.80
+            # 前半大幅に抑えて最後に爆発 / 平均 ≈ 1.00
+            if progress < 0.65:
+                return 0.74
             else:
-                return 0.80 + (progress - 0.62) * 2.00
+                return 0.74 + (progress - 0.65) / 0.35 * 1.46   # 0.74 → 2.20
 
     def update(self, dt: float):
         if self.finished:

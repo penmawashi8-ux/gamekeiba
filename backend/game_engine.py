@@ -185,19 +185,23 @@ class GameEngine:
 
     async def _place_bot_bets(self):
         amounts = [100, 200, 500, 1000, 2000]
-        # 強さに比例した重み（強い馬ほど選ばれやすい）
         strength_weights = [h.strength for h in self.horses]
         for i in range(BOT_COUNT):
             bot_id   = f"bot_{i}"
             bot_name = BOT_NAMES[i % len(BOT_NAMES)]
             horse    = random.choices(self.horses, weights=strength_weights, k=1)[0]
             amount   = random.choice(amounts)
-            if horse.strength >= 4:
-                # 強い馬は単勝・複勝の両方を必ず購入
+
+            # 現在のオッズを確認（複勝が単勝より高い場合は複勝を優先してプールを補正）
+            h_win  = self.betting.get_win_odds().get(horse.number, 0)
+            h_show = self.betting.get_show_odds().get(horse.number, 0)
+            if h_show > h_win > 0:
+                self.betting.place_bet(bot_id, bot_name, "show", horse.number, amount)
+            elif horse.strength >= 4:
+                # 強い馬は単勝・複勝の両方を購入
                 self.betting.place_bet(bot_id, bot_name, "win",  horse.number, amount)
                 self.betting.place_bet(bot_id, bot_name, "show", horse.number, amount)
             elif horse.strength <= 2:
-                # 弱い馬は複勝寄り
                 bet_type = random.choices(["win", "show"], weights=[1, 3], k=1)[0]
                 self.betting.place_bet(bot_id, bot_name, bet_type, horse.number, amount)
             else:
