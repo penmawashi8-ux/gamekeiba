@@ -256,29 +256,126 @@ export default function GameCanvas({ phase, horses, positions, raceRanking, coun
 }
 
 function drawHorse(ctx: CanvasRenderingContext2D, cx: number, cy: number, horse: HorseInfo, animT: number) {
-  const col = horse.color, dark = darken(col)
-  const lf = Math.sin(animT * 14) * 7, lb = -lf
+  const col = horse.color
+  const dk = darken(col)
   ctx.save()
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+
+  // Tail (behind body)
+  const tailSway = Math.sin(animT * 14) * 5
+  ctx.strokeStyle = dk
+  ctx.lineWidth = 3
+  ctx.beginPath()
+  ctx.moveTo(cx - 19, cy - 2)
+  ctx.bezierCurveTo(cx - 27, cy + 3, cx - 33, cy + 10 + tailSway, cx - 36, cy + 16 + tailSway * 1.3)
+  ctx.stroke()
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.moveTo(cx - 19, cy - 2)
+  ctx.bezierCurveTo(cx - 25, cy + 5, cx - 29, cy + 8 + tailSway * 0.5, cx - 31, cy + 13 + tailSway)
+  ctx.stroke()
+
+  // Legs helper (draws upper + lower segment + hoof)
+  const drawLeg = (lx: number, phaseOff: number) => {
+    const sw = Math.sin(animT * 14 + phaseOff) * 9
+    const kx = lx + sw; const ky = cy + 15
+    const hx = lx + sw * 0.5; const hy = cy + 24
+    ctx.strokeStyle = dk; ctx.lineWidth = 2.5
+    ctx.beginPath(); ctx.moveTo(lx, cy + 8); ctx.lineTo(kx, ky); ctx.lineTo(hx, hy); ctx.stroke()
+    ctx.fillStyle = '#1a0f05'
+    ctx.beginPath(); ctx.ellipse(hx, hy + 2, 3, 1.5, 0, 0, Math.PI * 2); ctx.fill()
+  }
+
+  // Back legs (drawn before body so body covers the top)
+  drawLeg(cx - 9, Math.PI / 2)
+  drawLeg(cx - 5, 3 * Math.PI / 2)
+
+  // Body — three overlapping ellipses for a rounder silhouette
   ctx.fillStyle = col
-  ctx.beginPath(); ctx.ellipse(cx, cy, 25, 10, 0, 0, Math.PI * 2); ctx.fill()
-  ctx.strokeStyle = dark; ctx.lineWidth = 1; ctx.stroke()
+  ctx.beginPath(); ctx.ellipse(cx - 12, cy - 1, 11, 9, 0.22, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.ellipse(cx, cy, 22, 11, 0, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.ellipse(cx + 13, cy - 1, 11, 9, -0.15, 0, Math.PI * 2); ctx.fill()
+  ctx.strokeStyle = dk; ctx.lineWidth = 1.2
+  ctx.beginPath(); ctx.ellipse(cx, cy, 22, 11, 0, 0, Math.PI * 2); ctx.stroke()
+
+  // Neck (bezier filled path)
   ctx.fillStyle = col
   ctx.beginPath()
-  ctx.moveTo(cx+19,cy-9); ctx.lineTo(cx+27,cy-23); ctx.lineTo(cx+38,cy-19); ctx.lineTo(cx+40,cy-8)
-  ctx.fill()
-  ctx.beginPath(); ctx.arc(cx+38,cy-15,8,0,Math.PI*2); ctx.fill()
-  ctx.strokeStyle = dark; ctx.stroke()
-  ctx.fillStyle = hexBrightness(col) < 80 ? '#bbb' : '#111'
-  ctx.beginPath(); ctx.arc(cx+43,cy-18,1.8,0,Math.PI*2); ctx.fill()
-  ctx.strokeStyle = dark; ctx.lineWidth = 2
-  ctx.beginPath(); ctx.moveTo(cx-23,cy-6); ctx.lineTo(cx-36,cy-15+lf/3); ctx.lineTo(cx-41,cy+3); ctx.stroke()
-  ctx.strokeStyle = '#7c4d1e'; ctx.lineWidth = 2.5
-  ;[[cx+11,lf],[cx+3,lb],[cx-9,lb],[cx-19,lf]].forEach(([lx,lo]) => {
-    ctx.beginPath(); ctx.moveTo(lx,cy+9); ctx.lineTo(lx+(lo as number)*0.55,cy+22); ctx.stroke()
-  })
-  ctx.fillStyle = needsDark(col) ? '#000' : '#fff'
+  ctx.moveTo(cx + 12, cy - 9)
+  ctx.bezierCurveTo(cx + 18, cy - 17, cx + 22, cy - 24, cx + 24, cy - 27)
+  ctx.lineTo(cx + 30, cy - 24)
+  ctx.bezierCurveTo(cx + 27, cy - 16, cx + 22, cy - 9, cx + 18, cy - 4)
+  ctx.closePath(); ctx.fill()
+
+  // Mane
+  ctx.strokeStyle = dk; ctx.lineWidth = 2.5
+  ctx.beginPath()
+  ctx.moveTo(cx + 26, cy - 28)
+  ctx.bezierCurveTo(cx + 21, cy - 22, cx + 17, cy - 15, cx + 15, cy - 7)
+  ctx.stroke()
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.moveTo(cx + 24, cy - 26)
+  ctx.bezierCurveTo(cx + 19, cy - 20, cx + 15, cy - 14, cx + 13, cy - 7)
+  ctx.stroke()
+
+  // Head (rotated ellipse)
+  ctx.fillStyle = col
+  ctx.save()
+  ctx.translate(cx + 34, cy - 21); ctx.rotate(0.25)
+  ctx.beginPath(); ctx.ellipse(0, 0, 11, 7, 0, 0, Math.PI * 2); ctx.fill()
+  ctx.strokeStyle = dk; ctx.lineWidth = 1; ctx.stroke()
+  ctx.restore()
+
+  // Muzzle / snout
+  ctx.fillStyle = col
+  ctx.beginPath(); ctx.ellipse(cx + 43, cy - 15, 5.5, 4, 0.3, 0, Math.PI * 2); ctx.fill()
+
+  // Nostril
+  ctx.fillStyle = dk
+  ctx.beginPath(); ctx.ellipse(cx + 46, cy - 13, 1.5, 1, 0.3, 0, Math.PI * 2); ctx.fill()
+
+  // Ear
+  ctx.fillStyle = col
+  ctx.beginPath()
+  ctx.moveTo(cx + 28, cy - 28); ctx.lineTo(cx + 31, cy - 36); ctx.lineTo(cx + 35, cy - 28)
+  ctx.closePath(); ctx.fill()
+  ctx.strokeStyle = dk; ctx.lineWidth = 0.8; ctx.stroke()
+
+  // Eye
+  ctx.fillStyle = '#fff'
+  ctx.beginPath(); ctx.arc(cx + 36, cy - 22, 2.2, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = '#111'
+  ctx.beginPath(); ctx.arc(cx + 36.5, cy - 22, 1.3, 0, Math.PI * 2); ctx.fill()
+
+  // Front legs (on top of body)
+  drawLeg(cx + 10, 0)
+  drawLeg(cx + 6, Math.PI)
+
+  // Jockey
+  const jBob = Math.sin(animT * 14) * 1.2
+  ctx.fillStyle = '#f0f0f0'
+  ctx.strokeStyle = col; ctx.lineWidth = 1.5
+  ctx.beginPath(); ctx.ellipse(cx + 9, cy - 15 + jBob, 8, 5, -0.4, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+  // Jersey stripe
+  ctx.strokeStyle = col; ctx.lineWidth = 2.5; ctx.globalAlpha = 0.75
+  ctx.beginPath(); ctx.moveTo(cx + 3, cy - 17 + jBob); ctx.lineTo(cx + 14, cy - 13 + jBob); ctx.stroke()
+  ctx.globalAlpha = 1
+  // Head
+  ctx.fillStyle = '#f5c39a'
+  ctx.beginPath(); ctx.arc(cx + 17, cy - 21 + jBob, 3.8, 0, Math.PI * 2); ctx.fill()
+  // Helmet
+  ctx.fillStyle = col
+  ctx.beginPath(); ctx.arc(cx + 17, cy - 23 + jBob, 4.3, Math.PI, 0); ctx.fill()
+  ctx.fillStyle = dk
+  ctx.beginPath(); ctx.rect(cx + 12.5, cy - 23.5 + jBob, 9, 1.5); ctx.fill()
+
+  // Horse number
+  ctx.fillStyle = needsDark(col) ? 'rgba(0,0,0,0.88)' : 'rgba(255,255,255,0.9)'
   ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center'
-  ctx.fillText(String(horse.number), cx-3, cy+4)
+  ctx.fillText(String(horse.number), cx - 2, cy + 5)
+
   ctx.restore()
 }
 
