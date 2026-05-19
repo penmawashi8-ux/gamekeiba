@@ -47,7 +47,7 @@ export interface GameState {
   positions: Record<string, HorsePosition>
   raceRanking: number[]
   winOdds: Record<string, number>
-  showOdds: Record<string, number>
+  showOdds: Record<string, [number, number]>
   pools: Pools
   payouts: PayoutInfo[]
   leaderboard: [string, number][]

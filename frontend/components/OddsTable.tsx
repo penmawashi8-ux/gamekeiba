@@ -5,7 +5,7 @@ import type { HorseInfo, Pools } from '@/types/game'
 interface Props {
   horses: HorseInfo[]
   winOdds: Record<string, number>
-  showOdds: Record<string, number>
+  showOdds: Record<string, [number, number]>
   pools: Pools
 }
 
@@ -68,7 +68,9 @@ export default function OddsTable({ horses, winOdds, showOdds, pools }: Props) {
                   </td>
                   <td className="px-3 py-2 text-right font-mono">
                     {so ? (
-                      <span className={`font-bold ${oddsColor(so)}`}>{so.toFixed(1)}倍</span>
+                      <span className={`font-bold text-xs ${oddsColor(so[0])}`}>
+                        {so[0].toFixed(1)}〜{so[1].toFixed(1)}倍
+                      </span>
                     ) : (
                       <span className="text-gray-600">-</span>
                     )}

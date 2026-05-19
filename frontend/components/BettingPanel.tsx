@@ -7,7 +7,7 @@ import type { UserState } from '@/types/game'
 interface Props {
   horses: HorseInfo[]
   winOdds: Record<string, number>
-  showOdds: Record<string, number>
+  showOdds: Record<string, [number, number]>
   user: UserState
   onBet: (betType: 'win' | 'show', horse: number, amount: number) => void
   disabled: boolean
@@ -30,9 +30,8 @@ export default function BettingPanel({ horses, winOdds, showOdds, user, onBet, d
     setTimeout(() => setFlash(null), 2000)
   }
 
-  const selectedOdds = selectedHorse
-    ? (betType === 'win' ? winOdds[String(selectedHorse)] : showOdds[String(selectedHorse)]) ?? null
-    : null
+  const selectedWinOdds  = (betType === 'win'  && selectedHorse) ? winOdds[String(selectedHorse)]  ?? null : null
+  const selectedShowRange = (betType === 'show' && selectedHorse) ? showOdds[String(selectedHorse)] ?? null : null
 
   return (
     <div className="bg-gray-900 rounded-lg p-4 space-y-4 h-full">
@@ -84,10 +83,10 @@ export default function BettingPanel({ horses, winOdds, showOdds, user, onBet, d
             <span className="text-gray-200 block text-center leading-tight">
               {h.name.slice(0, 4)}
             </span>
-            <span className="text-green-400 block text-center">
+            <span className="text-green-400 block text-center leading-tight" style={{ fontSize: '0.6rem' }}>
               {betType === 'win'
                 ? (winOdds[String(h.number)] ? `${winOdds[String(h.number)].toFixed(1)}倍` : '-')
-                : (showOdds[String(h.number)] ? `${showOdds[String(h.number)].toFixed(1)}倍` : '-')
+                : (() => { const r = showOdds[String(h.number)]; return r ? `${r[0].toFixed(1)}〜${r[1].toFixed(1)}倍` : '-' })()
               }
             </span>
           </button>
@@ -128,12 +127,19 @@ export default function BettingPanel({ horses, winOdds, showOdds, user, onBet, d
       </div>
 
       {/* expected payout */}
-      {selectedHorse && selectedOdds && (
-        <div className="bg-gray-800 rounded px-3 py-2 text-sm flex justify-between">
+      {selectedHorse && (selectedWinOdds != null || selectedShowRange != null) && (
+        <div className="bg-gray-800 rounded px-3 py-2 text-sm flex justify-between items-center">
           <span className="text-gray-400">予想払戻</span>
-          <span className="text-green-400 font-bold">
-            ¥{(Math.floor(amount * selectedOdds / 10) * 10).toLocaleString()}
-          </span>
+          {selectedWinOdds != null ? (
+            <span className="text-green-400 font-bold">
+              ¥{(Math.floor(amount * selectedWinOdds / 10) * 10).toLocaleString()}
+            </span>
+          ) : selectedShowRange != null ? (
+            <span className="text-green-400 font-bold text-xs">
+              ¥{(Math.floor(amount * selectedShowRange[0] / 10) * 10).toLocaleString()}
+              〜¥{(Math.floor(amount * selectedShowRange[1] / 10) * 10).toLocaleString()}
+            </span>
+          ) : null}
         </div>
       )}
 

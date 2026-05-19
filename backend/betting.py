@@ -1,7 +1,7 @@
 """馬券・オッズ計算（パリミュチュエル方式）"""
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Tuple
 
 WIN_TAKEOUT  = 0.80
 SHOW_TAKEOUT = 0.75
@@ -54,13 +54,39 @@ class BettingManager:
         return {h: max(1.0, round(total * WIN_TAKEOUT / p, 1))
                 for h, p in self._win_pool.items() if p > 0}
 
-    def get_show_odds(self) -> Dict[int, float]:
+    def get_show_odds_range(self) -> Dict[int, Tuple[float, float]]:
+        """各馬の複勝オッズ範囲 (min倍, max倍) を返す。
+
+        JRA方式: 3着以内馬の複勝合計額でネットプールを割る。
+          実配当 = 総複勝 × 0.75 / (1着複勝額 + 2着複勝額 + 3着複勝額)
+        レース前は「どの2頭と3着以内に入るか」不明なため範囲で表示:
+          min = 最人気2頭と同着した場合（分母最大 → 最低配当）
+          max = 最低人気2頭と同着した場合（分母最小 → 最高配当）
+        """
         total = sum(self._show_pool.values())
         if total == 0:
             return {}
-        # 複勝は上位3頭が的中するため、プールを3分割して各馬の払戻を計算
-        return {h: max(1.0, round(total * SHOW_TAKEOUT / 3 / p, 1))
-                for h, p in self._show_pool.items() if p > 0}
+        net = total * SHOW_TAKEOUT
+        result: Dict[int, Tuple[float, float]] = {}
+        for h, ph in self._show_pool.items():
+            if ph <= 0:
+                continue
+            others = sorted(
+                [p for hh, p in self._show_pool.items() if hh != h and p > 0],
+                reverse=True,
+            )
+            if len(others) >= 2:
+                min_denom = ph + others[0] + others[1]      # 最人気2頭 → 配当最小
+                max_denom = ph + others[-2] + others[-1]    # 最低人気2頭 → 配当最大
+            elif len(others) == 1:
+                min_denom = max_denom = ph + others[0]
+            else:
+                min_denom = max_denom = ph
+            result[h] = (
+                max(1.0, round(net / min_denom, 1)),
+                max(1.0, round(net / max_denom, 1)),
+            )
+        return result
 
     def get_pools(self) -> dict:
         return {
@@ -71,9 +97,14 @@ class BettingManager:
         }
 
     def calculate_payouts(self, first: int, second: int, third: int) -> List[PayoutResult]:
-        win_odds  = self.get_win_odds()
-        show_odds = self.get_show_odds()
+        win_odds = self.get_win_odds()
         top3 = {first, second, third}
+
+        # 複勝実配当: ネットプール ÷ 3着以内馬の複勝合計額（JRA方式）
+        net_show  = sum(self._show_pool.values()) * SHOW_TAKEOUT
+        top3_pool = sum(self._show_pool.get(h, 0) for h in top3)
+        show_div  = max(1.0, round(net_show / top3_pool, 1)) if top3_pool > 0 else 1.0
+
         results: List[PayoutResult] = []
         for bet in self._bets:
             payout = 0
@@ -82,7 +113,7 @@ class BettingManager:
                 odds   = max(1.0, win_odds.get(first, 0.0))
                 payout = (int(bet.amount * odds) // 10) * 10
             elif bet.bet_type == "show" and bet.horse in top3:
-                odds   = max(1.0, show_odds.get(bet.horse, 0.0))
+                odds   = show_div   # 3着以内馬は全員同じ配当
                 payout = (int(bet.amount * odds) // 10) * 10
             if payout > 0:
                 results.append(PayoutResult(

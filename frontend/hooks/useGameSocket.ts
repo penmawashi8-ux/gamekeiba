@@ -103,7 +103,7 @@ export function useGameSocket(playerName: string | null) {
               countdown: msg.countdown ?? 0,
               horses: msg.horses ?? g.horses,
               winOdds: parseOdds(msg.win_odds),
-              showOdds: parseOdds(msg.show_odds),
+              showOdds: parseShowOdds(msg.show_odds),
               pools: msg.pools ?? g.pools,
               leaderboard: msg.leaderboard ?? g.leaderboard,
               positions: {},
@@ -133,7 +133,7 @@ export function useGameSocket(playerName: string | null) {
               raceRanking: msg.ranking ?? [],
               horses: msg.horses ?? g.horses,
               winOdds: parseOdds(msg.win_odds),
-              showOdds: parseOdds(msg.show_odds),
+              showOdds: parseShowOdds(msg.show_odds),
               payouts: msg.payouts ?? [],
               leaderboard: msg.leaderboard ?? g.leaderboard,
             }))
@@ -147,7 +147,7 @@ export function useGameSocket(playerName: string | null) {
             setGame(g => ({
               ...g,
               winOdds: parseOdds(msg.win_odds),
-              showOdds: parseOdds(msg.show_odds),
+              showOdds: parseShowOdds(msg.show_odds),
               pools: msg.pools ?? g.pools,
             }))
             break
@@ -229,5 +229,14 @@ function parseOdds(raw: Record<string, number> | undefined): Record<string, numb
   if (!raw) return {}
   return Object.fromEntries(
     Object.entries(raw).map(([k, v]) => [k, Number(v)])
+  )
+}
+
+function parseShowOdds(raw: unknown): Record<string, [number, number]> {
+  if (!raw || typeof raw !== 'object') return {}
+  return Object.fromEntries(
+    Object.entries(raw as Record<string, unknown>)
+      .filter(([, v]) => Array.isArray(v) && (v as unknown[]).length >= 2)
+      .map(([k, v]) => [k, [Number((v as number[])[0]), Number((v as number[])[1])] as [number, number]])
   )
 }

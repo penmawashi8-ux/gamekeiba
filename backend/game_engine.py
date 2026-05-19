@@ -141,7 +141,7 @@ class GameEngine:
             "countdown":   self.countdown,
             "horses":      [h.to_dict() for h in self.horses],
             "win_odds":    {str(k): v for k, v in self.betting.get_win_odds().items()},
-            "show_odds":   {str(k): v for k, v in self.betting.get_show_odds().items()},
+            "show_odds":   {str(k): list(v) for k, v in self.betting.get_show_odds_range().items()},
             "pools":       self.betting.get_pools(),
             "leaderboard": self.users.get_ranking(5),
         }
@@ -169,7 +169,7 @@ class GameEngine:
             "ranking":     self.race_results,
             "horses":      [h.to_dict() for h in self.horses],
             "win_odds":    {str(k): v for k, v in self.betting.get_win_odds().items()},
-            "show_odds":   {str(k): v for k, v in self.betting.get_show_odds().items()},
+            "show_odds":   {str(k): list(v) for k, v in self.betting.get_show_odds_range().items()},
             "payouts":     self._last_payouts,
             "leaderboard": self.users.get_ranking(5),
         }
@@ -197,7 +197,7 @@ class GameEngine:
         await self._broadcast({
             "type":      "odds_update",
             "win_odds":  {str(k): v for k, v in self.betting.get_win_odds().items()},
-            "show_odds": {str(k): v for k, v in self.betting.get_show_odds().items()},
+            "show_odds": {str(k): list(v) for k, v in self.betting.get_show_odds_range().items()},
             "pools":     self.betting.get_pools(),
         })
         logger.info("Bot bets placed (%d bots)", BOT_COUNT)
@@ -225,7 +225,7 @@ class GameEngine:
         await self._broadcast({
             "type":      "odds_update",
             "win_odds":  {str(k): v for k, v in self.betting.get_win_odds().items()},
-            "show_odds": {str(k): v for k, v in self.betting.get_show_odds().items()},
+            "show_odds": {str(k): list(v) for k, v in self.betting.get_show_odds_range().items()},
             "pools":     self.betting.get_pools(),
         })
 
