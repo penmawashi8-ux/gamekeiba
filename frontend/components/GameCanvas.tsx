@@ -176,6 +176,10 @@ export default function GameCanvas({ phase, horses, positions, raceRanking, coun
             ctx.fillRect(PAD_LEFT, 10 + i * LANE_H, trackW, LANE_H - 1)
           }
 
+          // 鼻先が screenX になるよう中心をオフセット
+          const NOSE_OFFSET = 46
+          const horseX = screenX - NOSE_OFFSET
+
           // Speed lines behind horse
           if (!pos.finished) {
             const t = localAnimT.current[h.number]
@@ -187,14 +191,14 @@ export default function GameCanvas({ phase, horses, positions, raceRanking, coun
               ctx.globalAlpha = (1 - phase) * 0.35 * Math.min(1, pos.progress * 4)
               ctx.strokeStyle = '#fff'
               ctx.beginPath()
-              ctx.moveTo(screenX - len - phase * 35, ly)
-              ctx.lineTo(screenX - phase * 35, ly)
+              ctx.moveTo(horseX - len - phase * 35, ly)
+              ctx.lineTo(horseX - phase * 35, ly)
               ctx.stroke()
             }
             ctx.globalAlpha = 1
           }
 
-          drawHorse(ctx, screenX, y, h, localAnimT.current[h.number])
+          drawHorse(ctx, horseX, y, h, localAnimT.current[h.number])
         })
 
         ctx.restore()
@@ -228,7 +232,7 @@ export default function GameCanvas({ phase, horses, positions, raceRanking, coun
           const rank = raceRanking.indexOf(h.number) + 1
           const y = 10 + i * LANE_H + LANE_H / 2
           const progress = rank === 1 ? 1.0 : Math.max(0.55, 1.0 - (rank - 1) * 0.05)
-          drawHorse(ctx, PAD_LEFT + progress * trackW, y, h, 0)
+          drawHorse(ctx, PAD_LEFT + progress * trackW - 46, y, h, 0)
           if (rank >= 1 && rank <= 3) {
             const rc = ['#fbbf24','#9ca3af','#d97706']
             ctx.fillStyle = rc[rank - 1]

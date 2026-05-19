@@ -184,29 +184,16 @@ class GameEngine:
         return {"type": "game_state", "phase": "waiting"}
 
     async def _place_bot_bets(self):
-        amounts = [100, 200, 500, 1000, 2000]
+        amounts = [1000, 2000, 5000, 10000, 20000]
         strength_weights = [h.strength for h in self.horses]
         for i in range(BOT_COUNT):
             bot_id   = f"bot_{i}"
             bot_name = BOT_NAMES[i % len(BOT_NAMES)]
             horse    = random.choices(self.horses, weights=strength_weights, k=1)[0]
             amount   = random.choice(amounts)
-
-            # 現在のオッズを確認（複勝が単勝より高い場合は複勝を優先してプールを補正）
-            h_win  = self.betting.get_win_odds().get(horse.number, 0)
-            h_show = self.betting.get_show_odds().get(horse.number, 0)
-            if h_show > h_win > 0:
-                self.betting.place_bet(bot_id, bot_name, "show", horse.number, amount)
-            elif horse.strength >= 4:
-                # 強い馬は単勝・複勝の両方を購入
-                self.betting.place_bet(bot_id, bot_name, "win",  horse.number, amount)
-                self.betting.place_bet(bot_id, bot_name, "show", horse.number, amount)
-            elif horse.strength <= 2:
-                bet_type = random.choices(["win", "show"], weights=[1, 3], k=1)[0]
-                self.betting.place_bet(bot_id, bot_name, bet_type, horse.number, amount)
-            else:
-                bet_type = random.choice(["win", "show"])
-                self.betting.place_bet(bot_id, bot_name, bet_type, horse.number, amount)
+            # 単勝:複勝 = 3:2 で同じ馬選択分布を保つ → 常に単勝オッズ > 複勝オッズ
+            bet_type = random.choices(["win", "show"], weights=[3, 2], k=1)[0]
+            self.betting.place_bet(bot_id, bot_name, bet_type, horse.number, amount)
         await self._broadcast({
             "type":      "odds_update",
             "win_odds":  {str(k): v for k, v in self.betting.get_win_odds().items()},
