@@ -72,15 +72,116 @@ function PhaseBar({ phase, countdown, raceNumber }: { phase: string; countdown: 
   )
 }
 
+const NIGHT_START_JST = 1
+const NIGHT_END_JST   = 8
+
+function isNightJST(): boolean {
+  const jstHour = new Date(Date.now() + 9 * 3600 * 1000).getUTCHours()
+  return jstHour >= NIGHT_START_JST && jstHour < NIGHT_END_JST
+}
+
+function NightScreen() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-950 px-4">
+      <div className="text-center">
+        <div className="text-7xl mb-6">🌙</div>
+        <h1 className="text-white text-2xl font-bold mb-2">おやすみ中</h1>
+        <p className="text-gray-400 text-sm mb-1">現在サーバーはお休みしています</p>
+        <p className="text-gray-500 text-xs">
+          毎日 {NIGHT_END_JST}:00 〜 翌 {NIGHT_START_JST}:00（JST）に営業しています
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function BrokeModal({ onReset, onDismiss }: { onReset: () => void; onDismiss: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-7 w-full max-w-xs shadow-2xl text-center">
+        <div className="text-4xl mb-3">💸</div>
+        <h2 className="text-white text-lg font-bold mb-1">所持金が尽きました</h2>
+        <p className="text-gray-400 text-sm mb-5">¥10,000 にリセットしますか？</p>
+        <div className="flex gap-3">
+          <button onClick={onDismiss}
+            className="flex-1 py-2.5 rounded-xl bg-gray-800 text-gray-300 text-sm font-semibold
+              hover:bg-gray-700 active:scale-95 transition-all">
+            このまま続ける
+          </button>
+          <button onClick={onReset}
+            className="flex-1 py-2.5 rounded-xl bg-yellow-400 text-black text-sm font-bold
+              hover:bg-yellow-300 active:scale-95 transition-all">
+            リセット
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const PLAYER_NAME_KEY = 'keiba_player_name'
+const BROKE_THRESHOLD = 100
+
+function getSavedPlayerName(): string | null {
+  if (typeof window === 'undefined') return null
+  return localStorage.getItem(PLAYER_NAME_KEY)
+}
+
+function savePlayerName(name: string) {
+  localStorage.setItem(PLAYER_NAME_KEY, name)
+}
+
 export default function Home() {
   const [playerName, setPlayerName] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'win' | 'lose' } | null>(null)
-  const { game, user, connected, error, placeBet } = useGameSocket(playerName)
+  const [brokeAcknowledged, setBrokeAcknowledged] = useState(false)
+  const [isNight, setIsNight] = useState(false)
+  const { game, user, connected, error, restoreError, payoutSettled, placeBet, requestRestore } = useGameSocket(playerName)
+
+  useEffect(() => {
+    const check = () => setIsNight(isNightJST())
+    check()
+    const t = setInterval(check, 60_000)
+    return () => clearInterval(t)
+  }, [])
   const updateAvailable = useVersionCheck()
 
   useEffect(() => {
     if (window.location.search) history.replaceState(null, '', window.location.pathname)
+    const saved = getSavedPlayerName()
+    if (saved) setPlayerName(saved)
   }, [])
+
+  useEffect(() => {
+    if (user.balance >= BROKE_THRESHOLD) setBrokeAcknowledged(false)
+  }, [user.balance])
+
+  // 払い戻し確定後（payoutSettled）に残高チェック → 100円未満なら表示可能にする
+  // 馬券を買っていないレースは results フェーズ開始時にチェック
+  useEffect(() => {
+    if (game.phase === 'results') setBrokeAcknowledged(false)
+  }, [payoutSettled, game.phase])
+
+  // 結果フェーズ中のみ表示
+  const showBrokeModal = user.userId !== ''
+    && user.balance < BROKE_THRESHOLD
+    && !brokeAcknowledged
+    && game.phase === 'results'
+
+  const handleJoin = (name: string) => {
+    savePlayerName(name)
+    setPlayerName(name)
+  }
+
+  const handleChangeName = () => {
+    localStorage.removeItem(PLAYER_NAME_KEY)
+    setPlayerName(null)
+  }
+
+  const handleRestore = () => {
+    requestRestore()
+    setBrokeAcknowledged(true)
+  }
 
   useEffect(() => {
     if (user.lastPayout == null) return
@@ -92,7 +193,8 @@ export default function Home() {
     return () => clearTimeout(t)
   }, [user.lastPayout])
 
-  if (!playerName) return <LoginScreen onJoin={setPlayerName} />
+  if (isNight && !connected) return <NightScreen />
+  if (!playerName) return <LoginScreen onJoin={handleJoin} />
 
   const isBetting = game.phase === 'betting'
   const isRacing  = game.phase === 'racing'
@@ -100,6 +202,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
+      {showBrokeModal && <BrokeModal onReset={handleRestore} onDismiss={() => setBrokeAcknowledged(true)} />}
       <header className="sticky top-0 z-40 bg-gray-900/95 backdrop-blur border-b border-gray-800/80">
         <div className="max-w-5xl mx-auto px-3 py-2 flex items-center gap-3">
           <span className="text-lg">🏇</span>
@@ -112,7 +215,10 @@ export default function Home() {
               {game.online}人
             </span>
             <div className="text-right">
-              <div className="text-gray-400 text-xs leading-none mb-0.5">{user.displayName}</div>
+              <button onClick={handleChangeName}
+                className="text-gray-400 text-xs leading-none mb-0.5 hover:text-gray-200 transition-colors cursor-pointer">
+                {user.displayName}
+              </button>
               <div className="text-yellow-300 font-mono font-bold text-sm leading-none">¥{user.balance.toLocaleString()}</div>
             </div>
             <div className={`w-2 h-2 rounded-full shrink-0 ${connected ? 'bg-green-400' : 'bg-red-500'}`} />
@@ -136,6 +242,11 @@ export default function Home() {
         <div className={`fixed top-14 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-xl shadow-xl text-sm font-bold
           ${toast.type === 'win' ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-300'}`}>
           {toast.msg}
+        </div>
+      )}
+      {restoreError && (
+        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-xl shadow-xl text-sm font-bold bg-red-700 text-white">
+          {restoreError}
         </div>
       )}
       <main className="max-w-5xl mx-auto p-3 space-y-3">

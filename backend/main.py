@@ -1,11 +1,12 @@
 """FastAPI WebSocket サーバー"""
 
 import asyncio
+import datetime
 import json
 import logging
 import os
-import sys
 import time
+import uuid
 from typing import Dict
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -72,6 +73,21 @@ engine: GameEngine = None   # type: ignore[assignment]
 MAX_RUNTIME_HOURS     = float(os.environ.get("MAX_RUNTIME_HOURS",     "0"))
 IDLE_SHUTDOWN_MINUTES = float(os.environ.get("IDLE_SHUTDOWN_MINUTES", "0"))
 
+# JST夜間停止（例: 1〜8時）。0にすると無効
+_JST = datetime.timezone(datetime.timedelta(hours=9))
+NIGHT_START_JST = int(os.environ.get("NIGHT_START_JST", "1"))
+NIGHT_END_JST   = int(os.environ.get("NIGHT_END_JST",   "8"))
+
+
+def _is_night_jst() -> bool:
+    hour = datetime.datetime.now(_JST).hour
+    return NIGHT_START_JST > 0 and NIGHT_START_JST <= hour < NIGHT_END_JST
+
+
+if _is_night_jst():
+    logger.info("JST夜間帯 (%02d:00-%02d:00) のため起動しません", NIGHT_START_JST, NIGHT_END_JST)
+    os._exit(0)
+
 _idle_since: float | None = None
 _had_users  = False
 
@@ -96,6 +112,16 @@ async def _auto_shutdown():
     os._exit(0)
 
 
+async def _night_shutdown_watcher():
+    if NIGHT_START_JST <= 0:
+        return
+    while True:
+        await asyncio.sleep(60)
+        if _is_night_jst():
+            logger.info("JST夜間帯に入りました (%02d:00) — シャットダウン", NIGHT_START_JST)
+            os._exit(0)
+
+
 async def _idle_shutdown_watcher():
     if IDLE_SHUTDOWN_MINUTES <= 0:
         return
@@ -115,6 +141,7 @@ async def startup():
     asyncio.create_task(engine.run())
     asyncio.create_task(_auto_shutdown())
     asyncio.create_task(_idle_shutdown_watcher())
+    asyncio.create_task(_night_shutdown_watcher())
     logger.info("Game engine started")
 
 
@@ -140,7 +167,7 @@ async def ws_endpoint(websocket: WebSocket):
 
         name       = str(msg.get("name", "名無し"))[:20].strip() or "名無し"
         session_id = str(msg.get("session_id", ""))[:36]
-        user_id    = session_id if session_id else f"u_{name}"
+        user_id    = session_id if session_id else str(uuid.uuid4())
 
         manager.add(user_id, websocket)
         _on_user_connect()
@@ -204,6 +231,17 @@ async def _handle_msg(ws: WebSocket, user_id: str, display_name: str, msg: dict)
             "bets": [{"bet_type": b.bet_type, "horse": b.horse, "amount": b.amount}
                      for b in bets],
         }, ensure_ascii=False))
+
+    elif t == "restore_request":
+        if engine.phase == "betting" and engine.betting.get_bets_by_user(user_id):
+            await ws.send_text(json.dumps(
+                {"type": "restore_denied", "error": "馬券購入中はリセットできません"},
+                ensure_ascii=False
+            ))
+            return
+        balance = engine.users.restore_user(user_id)
+        if balance is not None:
+            await ws.send_text(json.dumps({"type": "restored", "balance": balance}, ensure_ascii=False))
 
     elif t == "ping":
         await ws.send_text(json.dumps({"type": "pong"}, ensure_ascii=False))
