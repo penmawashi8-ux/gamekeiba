@@ -58,7 +58,8 @@ class BettingManager:
         total = sum(self._show_pool.values())
         if total == 0:
             return {}
-        return {h: max(1.0, round(total * SHOW_TAKEOUT / p, 1))
+        # 複勝は上位3頭が的中するため、プールを3分割して各馬の払戻を計算
+        return {h: max(1.0, round(total * SHOW_TAKEOUT / 3 / p, 1))
                 for h, p in self._show_pool.items() if p > 0}
 
     def get_pools(self) -> dict:
