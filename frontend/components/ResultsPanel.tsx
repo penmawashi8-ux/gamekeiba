@@ -6,7 +6,7 @@ interface Props {
   ranking: number[]
   horses: HorseInfo[]
   winOdds: Record<string, number>
-  showOdds: Record<string, number>
+  showOdds: Record<string, [number, number]>
   payouts: PayoutInfo[]
   myUserId: string
   countdown: number
@@ -25,6 +25,9 @@ export default function ResultsPanel({
   const horseMap = Object.fromEntries(horses.map(h => [h.number, h]))
   const myPayouts = payouts.filter(p => p.user_id === myUserId)
   const myTotal   = myPayouts.reduce((s, p) => s + p.payout_amount, 0)
+  const showActualOdds = Object.fromEntries(
+    payouts.filter(p => p.bet_type === 'show').map(p => [String(p.horse), p.odds])
+  )
 
   return (
     <div className="bg-gray-900 rounded-lg p-4 space-y-4">
@@ -41,7 +44,8 @@ export default function ResultsPanel({
           const h = horseMap[num]
           if (!h) return null
           const wo  = winOdds[String(num)]
-          const so  = showOdds[String(num)]
+          const actualShowOdds = showActualOdds[String(num)]
+          const soRange = showOdds[String(num)]
           return (
             <div key={i} className="flex-1 rounded-lg overflow-hidden border border-gray-700">
               <div className={`text-center text-xs font-bold py-1 ${PLACE_STYLES[i]}`}>
@@ -59,9 +63,11 @@ export default function ResultsPanel({
                 {i === 0 && wo && (
                   <p className="text-yellow-400 text-xs mt-1">単勝 {wo.toFixed(1)}倍</p>
                 )}
-                {i <= 2 && so && (
-                  <p className="text-blue-400 text-xs">複勝 {so.toFixed(1)}倍</p>
-                )}
+                {i <= 2 && (actualShowOdds != null ? (
+                  <p className="text-blue-400 text-xs">複勝 {actualShowOdds.toFixed(1)}倍</p>
+                ) : soRange ? (
+                  <p className="text-blue-400 text-xs">複勝 {soRange[0].toFixed(1)}〜{soRange[1].toFixed(1)}倍</p>
+                ) : null)}
               </div>
             </div>
           )
