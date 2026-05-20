@@ -80,17 +80,17 @@ class Horse:
         if s == "逃げ":
             # 前半強い、後半急激に落ちる / 平均 ≈ 1.00
             if progress < 0.25:
-                return 1.20
+                return 1.23
             elif progress < 0.60:
-                return 1.20 - (progress - 0.25) / 0.35 * 0.35   # 1.20 → 0.85
+                return 1.23 - (progress - 0.25) / 0.35 * 0.35   # 1.23 → 0.88
             else:
-                return 0.85 - (progress - 0.60) / 0.40 * 0.13   # 0.85 → 0.72
+                return 0.88 - (progress - 0.60) / 0.40 * 0.13   # 0.88 → 0.75
         elif s == "先行":
-            # 前半やや速い、後半わずかに落ちる / 平均 ≈ 1.00
+            # 前半やや速い、後半落ちる / 平均 ≈ 1.00
             if progress < 0.50:
                 return 1.04
             else:
-                return 1.04 - (progress - 0.50) / 0.50 * 0.10   # 1.04 → 0.94
+                return 1.04 - (progress - 0.50) / 0.50 * 0.16   # 1.04 → 0.88
         elif s == "差し":
             # 前半抑えて後半伸びる / 平均 ≈ 1.00
             if progress < 0.50:
