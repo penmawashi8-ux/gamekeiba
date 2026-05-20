@@ -49,6 +49,7 @@ TRACK_LENGTH: float = 6000.0
 BASE_SPEED_MIN: float = 185.0
 BASE_SPEED_MAX: float = 210.0
 STRENGTH_MULT: dict = {1: 0.88, 2: 0.94, 3: 1.00, 4: 1.06, 5: 1.12}
+CONDITION_SIGMA: float = 0.10  # レースごとの調子ばらつき（±10%程度）
 
 
 class Horse:
@@ -63,12 +64,14 @@ class Horse:
         self.x: float = 0.0
         self.speed: float = 0.0
         self.base_speed: float = 0.0
+        self.condition: float = 1.0
         self.finished: bool = False
         self.finish_rank: Optional[int] = None
         self.anim_t: float = 0.0
 
     def setup_race(self):
         self.base_speed = random.uniform(BASE_SPEED_MIN, BASE_SPEED_MAX)
+        self.condition = max(0.70, min(1.30, random.gauss(1.0, CONDITION_SIGMA)))
         self.x = 0.0
         self.finished = False
         self.finish_rank = None
@@ -110,7 +113,7 @@ class Horse:
         sm = STRENGTH_MULT[self.strength]
         style_m = self._style_mult()
         noise = random.gauss(0, 3.0)
-        eff = self.base_speed * sm * style_m + noise
+        eff = self.base_speed * sm * style_m * self.condition + noise
         self.speed = max(BASE_SPEED_MIN * 0.55, min(BASE_SPEED_MAX * 1.50, eff))
         self.x += self.speed * dt
         self.anim_t += dt
