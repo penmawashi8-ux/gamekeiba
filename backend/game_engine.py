@@ -185,7 +185,7 @@ class GameEngine:
 
     async def _place_bot_bets(self):
         amounts = [1000, 2000, 5000, 10000, 20000]
-        strength_weights = [h.strength for h in self.horses]
+        strength_weights = [h.strength ** 2 for h in self.horses]
         for i in range(BOT_COUNT):
             bot_id   = f"bot_{i}"
             bot_name = BOT_NAMES[i % len(BOT_NAMES)]
