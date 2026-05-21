@@ -28,6 +28,11 @@ export default function ResultsPanel({
   const showActualOdds = Object.fromEntries(
     payouts.filter(p => p.bet_type === 'show').map(p => [String(p.horse), p.odds])
   )
+  const popularityMap: Record<string, number> = Object.fromEntries(
+    Object.entries(winOdds)
+      .sort(([, a], [, b]) => a - b)
+      .map(([horseNum], idx) => [horseNum, idx + 1])
+  )
 
   return (
     <div className="bg-gray-900 rounded-lg p-4 space-y-4">
@@ -59,7 +64,11 @@ export default function ResultsPanel({
                   {h.number}
                 </span>
                 <p className="text-white text-xs font-medium leading-tight">{h.name}</p>
-                <p className="text-gray-400 text-xs">{h.running_style}</p>
+                <p className="text-gray-400 text-xs">
+                  {popularityMap[String(h.number)] != null
+                    ? `${popularityMap[String(h.number)]}番人気`
+                    : h.running_style}
+                </p>
                 {i === 0 && wo && (
                   <p className="text-yellow-400 text-xs mt-1">単勝 {wo.toFixed(1)}倍</p>
                 )}
