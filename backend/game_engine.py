@@ -184,15 +184,15 @@ class GameEngine:
         return {"type": "game_state", "phase": "waiting"}
 
     async def _place_bot_bets(self):
-        amounts = [1000, 2000, 5000, 10000, 20000]
-        strength_weights = [h.strength ** 2 for h in self.horses]
+        win_amounts  = [1000, 2000, 5000, 10000, 20000]
+        show_amounts = [2000, 4000, 10000, 20000, 40000]
+        strength_weights = [h.strength ** 3 for h in self.horses]
         for i in range(BOT_COUNT):
             bot_id   = f"bot_{i}"
             bot_name = BOT_NAMES[i % len(BOT_NAMES)]
             horse    = random.choices(self.horses, weights=strength_weights, k=1)[0]
-            amount   = random.choice(amounts)
-            # 単勝:複勝 = 3:2 で同じ馬選択分布を保つ → 常に単勝オッズ > 複勝オッズ
-            bet_type = random.choices(["win", "show"], weights=[3, 2], k=1)[0]
+            bet_type = random.choices(["win", "show"], weights=[1, 2], k=1)[0]
+            amount   = random.choice(show_amounts if bet_type == "show" else win_amounts)
             self.betting.place_bet(bot_id, bot_name, bet_type, horse.number, amount)
         await self._broadcast({
             "type":      "odds_update",
