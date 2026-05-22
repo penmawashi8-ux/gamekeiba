@@ -89,11 +89,11 @@ class Horse:
             else:
                 return 0.88 - (progress - 0.60) / 0.40 * 0.13   # 0.88 → 0.75
         elif s == "先行":
-            # 前半やや速い、後半落ちる / 平均 ≈ 1.00
+            # 前半やや速い、後半落ちる / 調和平均≈1.025
             if progress < 0.50:
                 return 1.04
             else:
-                return 1.04 - (progress - 0.50) / 0.50 * 0.16   # 1.04 → 0.88
+                return 1.04 - (progress - 0.50) / 0.50 * 0.24   # 1.04 → 0.80
         elif s == "差し":
             # 前半抑えて後半伸びる / 平均 ≈ 1.00
             if progress < 0.50:
