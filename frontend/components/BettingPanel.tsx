@@ -66,7 +66,7 @@ export default function BettingPanel({ horses, winOdds, showOdds, user, onBet, d
             key={h.number}
             onClick={() => setSelectedHorse(h.number)}
             disabled={disabled}
-            style={{ borderColor: h.color }}
+            style={{ borderColor: visibleBorderColor(h.color) }}
             className={`relative py-2 rounded text-xs font-bold transition border-2
               ${selectedHorse === h.number
                 ? 'ring-2 ring-white scale-105'
@@ -187,4 +187,11 @@ function needsDark(hex: string): boolean {
   const g = parseInt(hex.slice(3, 5), 16)
   const b = parseInt(hex.slice(5, 7), 16)
   return (r * 299 + g * 587 + b * 114) / 1000 > 150
+}
+
+function visibleBorderColor(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return (r * 299 + g * 587 + b * 114) / 1000 < 60 ? '#aaaaaa' : hex
 }
