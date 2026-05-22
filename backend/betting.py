@@ -100,10 +100,9 @@ class BettingManager:
         win_odds = self.get_win_odds()
         top3 = {first, second, third}
 
-        # 複勝実配当: ネットプール ÷ 3着以内馬の複勝合計額（JRA方式）
-        net_show  = sum(self._show_pool.values()) * SHOW_TAKEOUT
-        top3_pool = sum(self._show_pool.get(h, 0) for h in top3)
-        show_div  = max(1.0, round(net_show / top3_pool, 1)) if top3_pool > 0 else 1.0
+        # 複勝実配当: JRA方式 = ネットプール÷3 ÷ その馬の複勝売上（馬ごとに個別計算）
+        net_show = sum(self._show_pool.values()) * SHOW_TAKEOUT
+        net_per_pos = net_show / 3.0
 
         results: List[PayoutResult] = []
         for bet in self._bets:
@@ -113,7 +112,8 @@ class BettingManager:
                 odds   = max(1.0, win_odds.get(first, 0.0))
                 payout = (int(bet.amount * odds) // 10) * 10
             elif bet.bet_type == "show" and bet.horse in top3:
-                odds   = show_div   # 3着以内馬は全員同じ配当
+                horse_pool = self._show_pool.get(bet.horse, 0)
+                odds = max(1.0, round(net_per_pos / horse_pool, 1)) if horse_pool > 0 else 1.0
                 payout = (int(bet.amount * odds) // 10) * 10
             if payout > 0:
                 results.append(PayoutResult(

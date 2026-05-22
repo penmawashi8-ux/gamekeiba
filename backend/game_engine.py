@@ -187,7 +187,11 @@ class GameEngine:
         win_amounts  = [1000, 2000, 5000, 10000, 20000]
         show_amounts = [2000, 4000, 10000, 20000, 40000]
         strength_weights = [h.strength ** 3 for h in self.horses]
-        # 単勝: BOT_COUNT 件
+        # 全馬に最低1件ずつ（オッズが成立しない馬をなくすため）
+        for h in self.horses:
+            self.betting.place_bet("bot_min", "CPU_ミニマム", "win",  h.number, 500)
+            self.betting.place_bet("bot_min", "CPU_ミニマム", "show", h.number, 1000)
+        # 単勝: BOT_COUNT 件（強い馬に偏重）
         for i in range(BOT_COUNT):
             horse = random.choices(self.horses, weights=strength_weights, k=1)[0]
             self.betting.place_bet(
