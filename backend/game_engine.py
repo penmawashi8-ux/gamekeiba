@@ -187,13 +187,20 @@ class GameEngine:
         win_amounts  = [1000, 2000, 5000, 10000, 20000]
         show_amounts = [2000, 4000, 10000, 20000, 40000]
         strength_weights = [h.strength ** 3 for h in self.horses]
+        # 単勝: BOT_COUNT 件
         for i in range(BOT_COUNT):
-            bot_id   = f"bot_{i}"
-            bot_name = BOT_NAMES[i % len(BOT_NAMES)]
-            horse    = random.choices(self.horses, weights=strength_weights, k=1)[0]
-            bet_type = random.choices(["win", "show"], weights=[1, 2], k=1)[0]
-            amount   = random.choice(show_amounts if bet_type == "show" else win_amounts)
-            self.betting.place_bet(bot_id, bot_name, bet_type, horse.number, amount)
+            horse = random.choices(self.horses, weights=strength_weights, k=1)[0]
+            self.betting.place_bet(
+                f"bot_w_{i}", BOT_NAMES[i % len(BOT_NAMES)],
+                "win", horse.number, random.choice(win_amounts),
+            )
+        # 複勝: 2倍の件数 × 2倍の金額（同じ強さ偏重で馬選択）
+        for i in range(BOT_COUNT * 2):
+            horse = random.choices(self.horses, weights=strength_weights, k=1)[0]
+            self.betting.place_bet(
+                f"bot_s_{i}", BOT_NAMES[i % len(BOT_NAMES)],
+                "show", horse.number, random.choice(show_amounts),
+            )
         await self._broadcast({
             "type":      "odds_update",
             "win_odds":  {str(k): v for k, v in self.betting.get_win_odds().items()},
