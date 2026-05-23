@@ -96,7 +96,7 @@ export default function BettingPanel({ horses, winOdds, showOdds, user, onBet, d
             <span className="text-green-600 block text-center leading-tight" style={{ fontSize: '0.6rem' }}>
               {betType === 'win'
                 ? (winOdds[String(h.number)] ? `${winOdds[String(h.number)].toFixed(1)}倍` : '-')
-                : (() => { const r = showOdds[String(h.number)]; return r ? `${r[0].toFixed(1)}倍` : '-' })()
+                : (() => { const r = showOdds[String(h.number)]; return r ? (r[0] !== r[1] ? `${r[0].toFixed(1)}〜${r[1].toFixed(1)}倍` : `${r[0].toFixed(1)}倍`) : '-' })()
               }
             </span>
           </button>
@@ -147,6 +147,7 @@ export default function BettingPanel({ horses, winOdds, showOdds, user, onBet, d
           ) : selectedShowRange != null ? (
             <span className="text-green-600 font-bold text-xs">
               ¥{(Math.floor(amount * selectedShowRange[0] / 10) * 10).toLocaleString()}
+              {selectedShowRange[0] !== selectedShowRange[1] && <>〜¥{(Math.floor(amount * selectedShowRange[1] / 10) * 10).toLocaleString()}</>}
             </span>
           ) : null}
         </div>
