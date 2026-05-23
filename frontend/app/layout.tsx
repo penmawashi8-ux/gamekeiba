@@ -4,13 +4,13 @@ import './globals.css'
 export const metadata: Metadata = {
   title: '競馬ゲーム',
   description: 'ブラウザで遊べるリアルタイム競馬ゲーム',
-  themeColor: '#e5e7eb',
+  themeColor: '#d1d5db',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ja">
-      <body className="min-h-screen bg-gray-200">{children}</body>
+      <body className="min-h-screen bg-gray-300">{children}</body>
     </html>
   )
 }

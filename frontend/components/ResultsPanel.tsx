@@ -58,7 +58,7 @@ export default function ResultsPanel({
               </div>
               <div className="p-2 text-center">
                 <span
-                  className="inline-flex w-8 h-8 items-center justify-center rounded-full text-sm font-bold mb-1"
+                  className="inline-flex w-8 h-8 items-center justify-center rounded-full text-sm font-bold mb-1 ring-1 ring-black/20"
                   style={{ background: h.color, color: needsDark(h.color) ? '#000' : '#fff' }}
                 >
                   {h.number}

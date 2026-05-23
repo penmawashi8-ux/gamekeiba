@@ -13,7 +13,7 @@ function LoginScreen({ onJoin }: { onJoin: (name: string) => void }) {
   const [name, setName] = useState('')
   const submit = () => { const n = name.trim(); if (n) onJoin(n) }
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-200 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gray-300 px-4">
       <div className="bg-white border border-gray-200 rounded-2xl p-8 w-full max-w-sm shadow-xl">
         <div className="text-center mb-6">
           <div className="text-5xl mb-3">🏇</div>
@@ -82,7 +82,7 @@ function isNightJST(): boolean {
 
 function NightScreen() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-200 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gray-300 px-4">
       <div className="text-center">
         <div className="text-7xl mb-6">🌙</div>
         <h1 className="text-gray-900 text-2xl font-bold mb-2">おやすみ中</h1>
@@ -104,8 +104,8 @@ function BrokeModal({ onReset, onDismiss }: { onReset: () => void; onDismiss: ()
         <p className="text-gray-500 text-sm mb-5">¥10,000 にリセットしますか？</p>
         <div className="flex gap-3">
           <button onClick={onDismiss}
-            className="flex-1 py-2.5 rounded-xl bg-gray-200 text-gray-700 text-sm font-semibold
-              hover:bg-gray-200 active:scale-95 transition-all">
+            className="flex-1 py-2.5 rounded-xl bg-gray-300 text-gray-700 text-sm font-semibold
+              hover:bg-gray-300 active:scale-95 transition-all">
             このまま続ける
           </button>
           <button onClick={onReset}
@@ -201,7 +201,7 @@ export default function Home() {
   const isResults = game.phase === 'results'
 
   return (
-    <div className="min-h-screen bg-gray-200 text-gray-900">
+    <div className="min-h-screen bg-gray-300 text-gray-900">
       {showBrokeModal && <BrokeModal onReset={handleRestore} onDismiss={() => setBrokeAcknowledged(true)} />}
       <header className="sticky top-0 z-40 bg-gray-100/95 backdrop-blur border-b border-gray-300">
         <div className="max-w-5xl mx-auto px-3 py-2 flex items-center gap-3">
