@@ -10,6 +10,7 @@ interface Props {
   payouts: PayoutInfo[]
   myUserId: string
   countdown: number
+  hasBet: boolean
 }
 
 const PLACE_LABELS = ['1着', '2着', '3着']
@@ -20,7 +21,7 @@ const PLACE_STYLES = [
 ]
 
 export default function ResultsPanel({
-  ranking, horses, winOdds, showOdds, payouts, myUserId, countdown
+  ranking, horses, winOdds, showOdds, payouts, myUserId, countdown, hasBet
 }: Props) {
   const horseMap = Object.fromEntries(horses.map(h => [h.number, h]))
   const myPayouts = payouts.filter(p => p.user_id === myUserId)
@@ -101,7 +102,7 @@ export default function ResultsPanel({
             ))}
           </div>
         </div>
-      ) : myPayouts.length === 0 && payouts.length > 0 ? (
+      ) : myPayouts.length === 0 && payouts.length > 0 && hasBet ? (
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center text-red-600 text-sm">
           ハズレ...
         </div>

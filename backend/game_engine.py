@@ -178,7 +178,9 @@ class GameEngine:
         if self.phase == "betting":
             return self._state_msg()
         if self.phase == "racing":
-            return self._race_update_msg()
+            # _race_update_msg には馬データが含まれないため、_state_msg で馬情報を送る
+            # ポジションは直後の race_update ブロードキャストで更新される
+            return self._state_msg()
         if self.phase == "results":
             return self._results_msg()
         return {"type": "game_state", "phase": "waiting"}
