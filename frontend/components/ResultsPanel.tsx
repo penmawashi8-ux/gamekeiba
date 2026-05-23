@@ -35,11 +35,11 @@ export default function ResultsPanel({
   )
 
   return (
-    <div className="bg-gray-900 rounded-lg p-4 space-y-4">
+    <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-white font-bold text-lg">レース結果</h2>
-        <span className="text-gray-400 text-sm">
-          次のレースまで <span className="text-yellow-300 font-mono">{countdown}秒</span>
+        <h2 className="text-gray-900 font-bold text-lg">レース結果</h2>
+        <span className="text-gray-500 text-sm">
+          次のレースまで <span className="text-yellow-600 font-mono">{countdown}秒</span>
         </span>
       </div>
 
@@ -52,7 +52,7 @@ export default function ResultsPanel({
           const actualShowOdds = showActualOdds[String(num)]
           const soRange = showOdds[String(num)]
           return (
-            <div key={i} className="flex-1 rounded-lg overflow-hidden border border-gray-700">
+            <div key={i} className="flex-1 rounded-lg overflow-hidden border border-gray-200">
               <div className={`text-center text-xs font-bold py-1 ${PLACE_STYLES[i]}`}>
                 {PLACE_LABELS[i]}
               </div>
@@ -63,19 +63,19 @@ export default function ResultsPanel({
                 >
                   {h.number}
                 </span>
-                <p className="text-white text-xs font-medium leading-tight">{h.name}</p>
-                <p className="text-gray-400 text-xs">
+                <p className="text-gray-900 text-xs font-medium leading-tight">{h.name}</p>
+                <p className="text-gray-500 text-xs">
                   {popularityMap[String(h.number)] != null
                     ? `${popularityMap[String(h.number)]}番人気`
                     : h.running_style}
                 </p>
                 {i === 0 && wo && (
-                  <p className="text-yellow-400 text-xs mt-1">単勝 {wo.toFixed(1)}倍</p>
+                  <p className="text-yellow-600 text-xs mt-1">単勝 {wo.toFixed(1)}倍</p>
                 )}
                 {i <= 2 && (actualShowOdds != null ? (
-                  <p className="text-blue-400 text-xs">複勝 {actualShowOdds.toFixed(1)}倍</p>
+                  <p className="text-blue-600 text-xs">複勝 {actualShowOdds.toFixed(1)}倍</p>
                 ) : soRange ? (
-                  <p className="text-blue-400 text-xs">複勝 {soRange[0].toFixed(1)}〜{soRange[1].toFixed(1)}倍</p>
+                  <p className="text-blue-600 text-xs">複勝 {soRange[0].toFixed(1)}〜{soRange[1].toFixed(1)}倍</p>
                 ) : null)}
               </div>
             </div>
@@ -85,13 +85,13 @@ export default function ResultsPanel({
 
       {/* personal payout */}
       {myTotal > 0 ? (
-        <div className="bg-green-900/50 border border-green-600 rounded-lg p-3">
-          <p className="text-green-300 font-bold text-center text-lg">
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+          <p className="text-green-700 font-bold text-center text-lg">
             払い戻し ¥{myTotal.toLocaleString()}
           </p>
           <div className="mt-2 space-y-1">
             {myPayouts.map((p, i) => (
-              <div key={i} className="flex justify-between text-xs text-green-200">
+              <div key={i} className="flex justify-between text-xs text-green-600">
                 <span>
                   {p.bet_type === 'win' ? '単勝' : '複勝'} {p.horse}番
                   × {p.odds.toFixed(1)}倍
@@ -102,22 +102,22 @@ export default function ResultsPanel({
           </div>
         </div>
       ) : myPayouts.length === 0 && payouts.length > 0 ? (
-        <div className="bg-red-900/40 border border-red-700 rounded-lg p-3 text-center text-red-300 text-sm">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center text-red-600 text-sm">
           ハズレ...
         </div>
       ) : null}
 
       {/* all payouts */}
       {payouts.length > 0 && (
-        <div className="border-t border-gray-700 pt-3">
-          <p className="text-gray-400 text-xs mb-2">全払い戻し情報</p>
+        <div className="border-t border-gray-200 pt-3">
+          <p className="text-gray-500 text-xs mb-2">全払い戻し情報</p>
           <div className="space-y-1 max-h-40 overflow-y-auto">
             {payouts.map((p, i) => (
-              <div key={i} className="flex justify-between text-xs bg-gray-800 rounded px-2 py-1">
-                <span className="text-gray-300">
+              <div key={i} className="flex justify-between text-xs bg-gray-50 border border-gray-100 rounded px-2 py-1">
+                <span className="text-gray-700">
                   {p.display_name} — {p.bet_type === 'win' ? '単勝' : '複勝'} {p.horse}番
                 </span>
-                <span className="text-green-400 font-mono">¥{p.payout_amount.toLocaleString()}</span>
+                <span className="text-green-600 font-mono">¥{p.payout_amount.toLocaleString()}</span>
               </div>
             ))}
           </div>

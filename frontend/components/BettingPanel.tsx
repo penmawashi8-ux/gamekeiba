@@ -34,10 +34,10 @@ export default function BettingPanel({ horses, winOdds, showOdds, user, onBet, d
   const selectedShowRange = (betType === 'show' && selectedHorse) ? showOdds[String(selectedHorse)] ?? null : null
 
   return (
-    <div className="bg-gray-900 rounded-lg p-4 space-y-4 h-full">
+    <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-4 h-full">
       <div className="flex items-center justify-between">
-        <h2 className="text-white font-bold text-lg">馬券購入</h2>
-        <span className="text-yellow-400 font-mono text-sm">
+        <h2 className="text-gray-900 font-bold text-lg">馬券購入</h2>
+        <span className="text-yellow-600 font-mono text-sm">
           残高 ¥{user.balance.toLocaleString()}
         </span>
       </div>
@@ -51,7 +51,7 @@ export default function BettingPanel({ horses, winOdds, showOdds, user, onBet, d
             className={`flex-1 py-2 rounded font-bold text-sm transition
               ${betType === bt
                 ? 'bg-yellow-400 text-black'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
           >
             {bt === 'win' ? '単勝' : '複勝'}
@@ -80,10 +80,10 @@ export default function BettingPanel({ horses, winOdds, showOdds, user, onBet, d
             >
               {h.number}
             </span>
-            <span className="text-gray-200 block text-center leading-tight">
+            <span className="text-gray-700 block text-center leading-tight">
               {h.name.slice(0, 4)}
             </span>
-            <span className="text-green-400 block text-center leading-tight" style={{ fontSize: '0.6rem' }}>
+            <span className="text-green-600 block text-center leading-tight" style={{ fontSize: '0.6rem' }}>
               {betType === 'win'
                 ? (winOdds[String(h.number)] ? `${winOdds[String(h.number)].toFixed(1)}倍` : '-')
                 : (() => { const r = showOdds[String(h.number)]; return r ? `${r[0].toFixed(1)}〜${r[1].toFixed(1)}倍` : '-' })()
@@ -101,7 +101,7 @@ export default function BettingPanel({ horses, winOdds, showOdds, user, onBet, d
               key={p}
               onClick={() => setAmount(p)}
               className={`px-2 py-1 rounded text-xs font-bold transition
-                ${amount === p ? 'bg-yellow-400 text-black' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                ${amount === p ? 'bg-yellow-400 text-black' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
             >
               {p >= 1000 ? `${p / 1000}k` : p}
             </button>
@@ -120,7 +120,7 @@ export default function BettingPanel({ horses, winOdds, showOdds, user, onBet, d
             step={100}
             value={amount}
             onChange={e => setAmount(Math.max(0, parseInt(e.target.value) || 0))}
-            className="flex-1 bg-gray-800 text-white rounded px-3 py-1.5 text-sm font-mono border border-gray-600 focus:border-yellow-400 outline-none"
+            className="flex-1 bg-gray-50 text-gray-900 rounded px-3 py-1.5 text-sm font-mono border border-gray-300 focus:border-yellow-500 outline-none"
           />
           <span className="text-gray-400 text-sm">円</span>
         </div>
@@ -128,14 +128,14 @@ export default function BettingPanel({ horses, winOdds, showOdds, user, onBet, d
 
       {/* expected payout */}
       {selectedHorse && (selectedWinOdds != null || selectedShowRange != null) && (
-        <div className="bg-gray-800 rounded px-3 py-2 text-sm flex justify-between items-center">
-          <span className="text-gray-400">予想払戻</span>
+        <div className="bg-gray-50 border border-gray-200 rounded px-3 py-2 text-sm flex justify-between items-center">
+          <span className="text-gray-500">予想払戻</span>
           {selectedWinOdds != null ? (
-            <span className="text-green-400 font-bold">
+            <span className="text-green-600 font-bold">
               ¥{(Math.floor(amount * selectedWinOdds / 10) * 10).toLocaleString()}
             </span>
           ) : selectedShowRange != null ? (
-            <span className="text-green-400 font-bold text-xs">
+            <span className="text-green-600 font-bold text-xs">
               ¥{(Math.floor(amount * selectedShowRange[0] / 10) * 10).toLocaleString()}
               〜¥{(Math.floor(amount * selectedShowRange[1] / 10) * 10).toLocaleString()}
             </span>
@@ -149,7 +149,7 @@ export default function BettingPanel({ horses, winOdds, showOdds, user, onBet, d
         disabled={disabled || !selectedHorse}
         className={`w-full py-3 rounded-lg font-bold text-base transition
           ${disabled || !selectedHorse
-            ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+            ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
             : 'bg-yellow-400 text-black hover:bg-yellow-300 active:scale-95'
           }`}
       >
@@ -157,22 +157,22 @@ export default function BettingPanel({ horses, winOdds, showOdds, user, onBet, d
       </button>
 
       {flash && (
-        <div className="bg-green-800 text-green-200 text-sm text-center rounded px-2 py-1 animate-pulse">
+        <div className="bg-green-100 text-green-700 text-sm text-center rounded px-2 py-1 animate-pulse">
           {flash}
         </div>
       )}
 
       {/* current bets */}
       {user.myBets.length > 0 && (
-        <div className="border-t border-gray-700 pt-3">
-          <p className="text-gray-400 text-xs mb-2">購入済み馬券</p>
+        <div className="border-t border-gray-200 pt-3">
+          <p className="text-gray-500 text-xs mb-2">購入済み馬券</p>
           <div className="space-y-1 max-h-32 overflow-y-auto">
             {user.myBets.map((b, i) => (
-              <div key={i} className="flex justify-between text-xs bg-gray-800 rounded px-2 py-1">
-                <span className="text-gray-300">
+              <div key={i} className="flex justify-between text-xs bg-gray-50 border border-gray-100 rounded px-2 py-1">
+                <span className="text-gray-700">
                   {b.bet_type === 'win' ? '単勝' : '複勝'} {b.horse}番
                 </span>
-                <span className="text-yellow-300 font-mono">¥{b.amount.toLocaleString()}</span>
+                <span className="text-yellow-600 font-mono">¥{b.amount.toLocaleString()}</span>
               </div>
             ))}
           </div>
