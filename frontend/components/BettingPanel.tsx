@@ -69,8 +69,8 @@ export default function BettingPanel({ horses, winOdds, showOdds, user, onBet, d
             style={{
               borderColor: visibleBorderColor(h.color),
               ...(selectedHorse === h.number && {
-                boxShadow: `0 0 0 3px ${h.color}, 0 4px 14px ${h.color}88`,
-                backgroundColor: h.color + '22',
+                boxShadow: `0 0 0 3px ${visibleBorderColor(h.color)}, 0 4px 14px ${visibleBorderColor(h.color)}88`,
+                backgroundColor: visibleBorderColor(h.color) + '22',
               }),
             }}
             className={`relative py-2 rounded text-xs font-bold transition-all border-2
@@ -82,7 +82,7 @@ export default function BettingPanel({ horses, winOdds, showOdds, user, onBet, d
           >
             {selectedHorse === h.number && (
               <span className="absolute top-0.5 right-0.5 text-[9px] font-black leading-none"
-                style={{ color: needsDark(h.color) ? h.color : '#333' }}>✓</span>
+                style={{ color: visibleBorderColor(h.color) }}>✓</span>
             )}
             <span
               className="block rounded-sm px-1 mb-0.5 text-center"
