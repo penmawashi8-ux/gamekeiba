@@ -13,7 +13,7 @@ function LoginScreen({ onJoin }: { onJoin: (name: string) => void }) {
   const [name, setName] = useState('')
   const submit = () => { const n = name.trim(); if (n) onJoin(n) }
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
       <div className="bg-white border border-gray-200 rounded-2xl p-8 w-full max-w-sm shadow-xl">
         <div className="text-center mb-6">
           <div className="text-5xl mb-3">🏇</div>
@@ -82,7 +82,7 @@ function isNightJST(): boolean {
 
 function NightScreen() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
       <div className="text-center">
         <div className="text-7xl mb-6">🌙</div>
         <h1 className="text-gray-900 text-2xl font-bold mb-2">おやすみ中</h1>
@@ -201,11 +201,10 @@ export default function Home() {
   const isResults = game.phase === 'results'
 
   return (
-    <div className="min-h-screen bg-white text-gray-900">
+    <div className="min-h-screen bg-gray-100 text-gray-900">
       {showBrokeModal && <BrokeModal onReset={handleRestore} onDismiss={() => setBrokeAcknowledged(true)} />}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-gray-200">
+      <header className="sticky top-0 z-40 bg-gray-50/95 backdrop-blur border-b border-gray-200">
         <div className="max-w-5xl mx-auto px-3 py-2 flex items-center gap-3">
-          <span className="text-lg">🏇</span>
           <div className="flex-1 min-w-0">
             <PhaseBar phase={game.phase} countdown={game.countdown} raceNumber={game.raceNumber} />
           </div>
