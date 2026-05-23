@@ -55,37 +55,16 @@ class BettingManager:
                 for h, p in self._win_pool.items() if p > 0}
 
     def get_show_odds_range(self) -> Dict[int, Tuple[float, float]]:
-        """各馬の複勝オッズ範囲 (min倍, max倍) を返す。
-
-        JRA方式: 3着以内馬の複勝合計額でネットプールを割る。
-          実配当 = 総複勝 × 0.75 / (1着複勝額 + 2着複勝額 + 3着複勝額)
-        レース前は「どの2頭と3着以内に入るか」不明なため範囲で表示:
-          min = 最人気2頭と同着した場合（分母最大 → 最低配当）
-          max = 最低人気2頭と同着した場合（分母最小 → 最高配当）
-        """
+        """各馬の複勝オッズ（現在の推定値）。settle_payoutsと同じ式で計算。"""
         total = sum(self._show_pool.values())
         if total == 0:
             return {}
-        net = total * SHOW_TAKEOUT
+        net_per_pos = total * SHOW_TAKEOUT / 3.0
         result: Dict[int, Tuple[float, float]] = {}
         for h, ph in self._show_pool.items():
-            if ph <= 0:
-                continue
-            others = sorted(
-                [p for hh, p in self._show_pool.items() if hh != h and p > 0],
-                reverse=True,
-            )
-            if len(others) >= 2:
-                min_denom = ph + others[0] + others[1]      # 最人気2頭 → 配当最小
-                max_denom = ph + others[-2] + others[-1]    # 最低人気2頭 → 配当最大
-            elif len(others) == 1:
-                min_denom = max_denom = ph + others[0]
-            else:
-                min_denom = max_denom = ph
-            result[h] = (
-                max(1.0, round(net / min_denom, 1)),
-                max(1.0, round(net / max_denom, 1)),
-            )
+            if ph > 0:
+                odds = max(1.0, round(net_per_pos / ph, 1))
+                result[h] = (odds, odds)
         return result
 
     def get_pools(self) -> dict:
