@@ -101,11 +101,11 @@ class Horse:
             else:
                 return 0.82 + (progress - 0.50) / 0.50 * 0.72   # 0.82 → 1.54
         else:  # 追い込み
-            # 前半ゆっくり後半加速 / 調和平均≈1.03で他スタイルと均衡
-            if progress < 0.50:
-                return 0.80
+            # 前半抑えて後半一気に伸びる / キックオフ45%に前倒し
+            if progress < 0.45:
+                return 0.83
             else:
-                return 0.80 + (progress - 0.50) / 0.50 * 1.00   # 0.80 → 1.80
+                return 0.83 + (progress - 0.45) / 0.55 * 1.02   # 0.83 → 1.85
 
     def update(self, dt: float):
         if self.finished:
