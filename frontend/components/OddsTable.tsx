@@ -69,7 +69,7 @@ export default function OddsTable({ horses, winOdds, showOdds, pools }: Props) {
                   <td className="px-3 py-2 text-right font-mono">
                     {so ? (
                       <span className={`font-bold text-xs ${oddsColor(so[0])}`}>
-                        {so[0].toFixed(1)}倍
+                        {so[0].toFixed(1)}{so[0] !== so[1] ? `〜${so[1].toFixed(1)}` : ''}倍
                       </span>
                     ) : (
                       <span className="text-gray-400">-</span>
