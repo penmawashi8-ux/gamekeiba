@@ -66,14 +66,24 @@ export default function BettingPanel({ horses, winOdds, showOdds, user, onBet, d
             key={h.number}
             onClick={() => setSelectedHorse(h.number)}
             disabled={disabled}
-            style={{ borderColor: visibleBorderColor(h.color) }}
-            className={`relative py-2 rounded text-xs font-bold transition border-2
+            style={{
+              borderColor: visibleBorderColor(h.color),
+              ...(selectedHorse === h.number && {
+                boxShadow: `0 0 0 3px ${h.color}, 0 4px 14px ${h.color}88`,
+                backgroundColor: h.color + '22',
+              }),
+            }}
+            className={`relative py-2 rounded text-xs font-bold transition-all border-2
               ${selectedHorse === h.number
-                ? 'ring-2 ring-white scale-105'
-                : 'opacity-80 hover:opacity-100'
+                ? 'scale-110'
+                : 'opacity-75 hover:opacity-100'
               }
               ${disabled ? 'cursor-not-allowed' : ''}`}
           >
+            {selectedHorse === h.number && (
+              <span className="absolute top-0.5 right-0.5 text-[9px] font-black leading-none"
+                style={{ color: needsDark(h.color) ? h.color : '#333' }}>✓</span>
+            )}
             <span
               className="block rounded-sm px-1 mb-0.5 text-center"
               style={{ background: h.color, color: needsDark(h.color) ? '#000' : '#fff' }}
