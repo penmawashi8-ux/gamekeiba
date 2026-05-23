@@ -187,7 +187,7 @@ class GameEngine:
         win_amounts  = [1000, 2000, 5000, 10000, 20000]
         show_amounts = [2000, 4000, 10000, 20000, 40000]
         win_weights  = [h.strength ** 3 for h in self.horses]
-        show_weights = [h.strength ** 3 for h in self.horses]  # 複勝: 偏りを少し緩める
+        show_weights = [h.strength ** 1.5 for h in self.horses]  # 複勝: 実JRA同様に均一寄りの分布
         # 全馬に最低1件ずつ（オッズが成立しない馬をなくすため）
         for h in self.horses:
             self.betting.place_bet("bot_min", "CPU_ミニマム", "win",  h.number, 500)
