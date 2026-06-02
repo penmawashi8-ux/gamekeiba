@@ -15,9 +15,12 @@ BETTING_SECONDS  = 60
 RESULTS_SECONDS  = 12
 RACE_DT          = 0.05
 
-BOT_NAMES = ["CPU_アラシ", "CPU_カゼマル", "CPU_ホシカゲ", "CPU_タイヨウ", "CPU_ミカヅキ"]
-BOT_BET_THRESHOLD = 3000
-BOT_COUNT = 4
+BOT_NAMES = [
+    "CPU_アラシ", "CPU_カゼマル", "CPU_ホシカゲ", "CPU_タイヨウ", "CPU_ミカヅキ",
+    "CPU_ナミカゼ", "CPU_イナヅマ", "CPU_フウジン", "CPU_カミナリ", "CPU_ツムジ",
+]
+BOT_BET_THRESHOLD = 300000
+BOT_COUNT = 400
 
 
 class GameEngine:
@@ -66,11 +69,8 @@ class GameEngine:
             await asyncio.sleep(1)
             self.countdown -= 1
             if not bot_placed and self.countdown == BETTING_SECONDS // 2:
-                pools = self.betting.get_pools()
-                total = pools["win_total"] + pools["show_total"]
-                if total < BOT_BET_THRESHOLD:
-                    await self._place_bot_bets()
-                    bot_placed = True
+                await self._place_bot_bets()
+                bot_placed = True
 
     async def _racing_phase(self):
         self.phase = "racing"
@@ -141,7 +141,7 @@ class GameEngine:
             "countdown":   self.countdown,
             "horses":      [h.to_dict() for h in self.horses],
             "win_odds":    {str(k): v for k, v in self.betting.get_win_odds().items()},
-            "show_odds":   {str(k): v for k, v in self.betting.get_show_odds().items()},
+            "show_odds":   {str(k): list(v) for k, v in self.betting.get_show_odds_range().items()},
             "pools":       self.betting.get_pools(),
             "leaderboard": self.users.get_ranking(5),
         }
@@ -169,7 +169,7 @@ class GameEngine:
             "ranking":     self.race_results,
             "horses":      [h.to_dict() for h in self.horses],
             "win_odds":    {str(k): v for k, v in self.betting.get_win_odds().items()},
-            "show_odds":   {str(k): v for k, v in self.betting.get_show_odds().items()},
+            "show_odds":   {str(k): list(v) for k, v in self.betting.get_show_odds_range().items()},
             "payouts":     self._last_payouts,
             "leaderboard": self.users.get_ranking(5),
         }
@@ -178,25 +178,40 @@ class GameEngine:
         if self.phase == "betting":
             return self._state_msg()
         if self.phase == "racing":
-            return self._race_update_msg()
+            # _race_update_msg には馬データが含まれないため、_state_msg で馬情報を送る
+            # ポジションは直後の race_update ブロードキャストで更新される
+            return self._state_msg()
         if self.phase == "results":
             return self._results_msg()
         return {"type": "game_state", "phase": "waiting"}
 
     async def _place_bot_bets(self):
-        amounts = [100, 200, 500, 1000, 2000]
-        horse_nums = [h.number for h in self.horses]
+        win_amounts  = [1000, 2000, 5000, 10000, 20000]
+        show_amounts = [2000, 4000, 10000, 20000, 40000]
+        win_weights  = [h.strength ** 3 for h in self.horses]
+        show_weights = [h.strength ** 1.5 for h in self.horses]  # 複勝: 実JRA同様に均一寄りの分布
+        # 全馬に最低1件ずつ（オッズが成立しない馬をなくすため）
+        for h in self.horses:
+            self.betting.place_bet("bot_min", "CPU_ミニマム", "win",  h.number, 500)
+            self.betting.place_bet("bot_min", "CPU_ミニマム", "show", h.number, 1000)
+        # 単勝: BOT_COUNT 件（強い馬に偏重）
         for i in range(BOT_COUNT):
-            bot_id   = f"bot_{i}"
-            bot_name = BOT_NAMES[i % len(BOT_NAMES)]
-            bet_type = random.choice(["win", "show"])
-            horse    = random.choice(horse_nums)
-            amount   = random.choice(amounts)
-            self.betting.place_bet(bot_id, bot_name, bet_type, horse, amount)
+            horse = random.choices(self.horses, weights=win_weights, k=1)[0]
+            self.betting.place_bet(
+                f"bot_w_{i}", BOT_NAMES[i % len(BOT_NAMES)],
+                "win", horse.number, random.choice(win_amounts),
+            )
+        # 複勝: 2倍の件数 × 2倍の金額（単勝より強い馬への集中度が高い）
+        for i in range(BOT_COUNT * 2):
+            horse = random.choices(self.horses, weights=show_weights, k=1)[0]
+            self.betting.place_bet(
+                f"bot_s_{i}", BOT_NAMES[i % len(BOT_NAMES)],
+                "show", horse.number, random.choice(show_amounts),
+            )
         await self._broadcast({
             "type":      "odds_update",
             "win_odds":  {str(k): v for k, v in self.betting.get_win_odds().items()},
-            "show_odds": {str(k): v for k, v in self.betting.get_show_odds().items()},
+            "show_odds": {str(k): list(v) for k, v in self.betting.get_show_odds_range().items()},
             "pools":     self.betting.get_pools(),
         })
         logger.info("Bot bets placed (%d bots)", BOT_COUNT)
@@ -209,8 +224,8 @@ class GameEngine:
             return {"ok": False, "error": "馬券受付中ではありません"}
         if horse_num < 1 or horse_num > len(self.horses):
             return {"ok": False, "error": f"馬番は1〜{len(self.horses)}で指定してください"}
-        if amount < 100 or amount > 100_000:
-            return {"ok": False, "error": "賭け金は100〜100,000円で指定してください"}
+        if amount < 100 or amount > 10_000_000:
+            return {"ok": False, "error": "賭け金は100〜10,000,000円で指定してください"}
 
         balance = self.users.get_balance(user_id)
         if balance is None:
@@ -224,7 +239,7 @@ class GameEngine:
         await self._broadcast({
             "type":      "odds_update",
             "win_odds":  {str(k): v for k, v in self.betting.get_win_odds().items()},
-            "show_odds": {str(k): v for k, v in self.betting.get_show_odds().items()},
+            "show_odds": {str(k): list(v) for k, v in self.betting.get_show_odds_range().items()},
             "pools":     self.betting.get_pools(),
         })
 
