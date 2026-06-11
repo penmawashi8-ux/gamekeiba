@@ -56,6 +56,9 @@ python3 video_tools/record_play_vertical.py
 python3 video_tools/make_shorts.py
 ```
 
+冒頭には [ボドゲ広場](https://boardgamecat.com) の紹介カード
+(`assets/intro_shorts.png`)が約3秒入ります。
+
 `make_shorts.py` は横長版と違い**完全自動**です:
 
 - イベントログから「オッズ発表〜ベット」「レース」「払い戻し」だけを残して
@@ -64,3 +67,22 @@ python3 video_tools/make_shorts.py
   どんな結果のテイクでもそのまま動画化できます
 - BGMはnumpyで合成したチップチューン風ループ(著作権フリー)を低音量でミックス
 - 字幕は縦画面向けに大きめで焼き込み
+
+## GitHub Actionsで実行する
+
+`.github/workflows/make-shorts-video.yml` を用意してあります。
+
+1. GitHubの **Actions** タブ → 「ショート動画生成」→ **Run workflow**
+2. 10〜15分ほどで完了(VOICEVOXはキャッシュされるので2回目以降は速い)
+3. 実行結果ページ下部の **Artifacts** から `keiba-shorts` をダウンロード
+
+スクリプトは環境変数で調整できます:
+
+| 環境変数 | 既定値 | 説明 |
+|---|---|---|
+| `VIDEO_OUT` | `/home/user/video_work` | 中間ファイル・出力先ディレクトリ |
+| `CHROME_PATH` | (未指定) | Chromium実行ファイル。未指定ならPlaywright標準のChromium |
+| `INTRO_IMG` | `video_tools/assets/intro_shorts.png` | 冒頭の紹介カード画像 |
+
+注意: 録画は「第1レースの受付開始から」始める前提なので、
+バックエンドは録画の直前に起動してください(ワークフローはそうなっています)。

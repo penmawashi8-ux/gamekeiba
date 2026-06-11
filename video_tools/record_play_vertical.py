@@ -11,8 +11,8 @@ from playwright.async_api import async_playwright
 
 WS_URL = "ws://localhost:8000/ws"
 APP_URL = "http://localhost:3000"
-CHROME = "/opt/tools/ungoogled-chromium-149.0.7827.53-1-x86_64_linux/chrome"
-OUT = "/home/user/video_work"
+CHROME = os.environ.get("CHROME_PATH") or None  # 未指定ならPlaywright標準のChromium
+OUT = os.environ.get("VIDEO_OUT", "/home/user/video_work")
 PLAYER_NAME = "クロードAI"
 
 events = []

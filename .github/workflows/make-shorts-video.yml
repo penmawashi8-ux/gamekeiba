@@ -1,0 +1,72 @@
+name: ショート動画生成
+
+# Actionsタブ → このワークフロー → 「Run workflow」で手動実行。
+# 完了後、実行結果ページの Artifacts から keiba-shorts をダウンロード。
+on:
+  workflow_dispatch:
+
+jobs:
+  video:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VIDEO_OUT: ${{ github.workspace }}/video_out
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: システム依存パッケージ
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-noto-cjk p7zip-full
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Python依存パッケージ + Chromium
+        run: |
+          pip install playwright websockets numpy
+          pip install -r backend/requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: VOICEVOXエンジンのキャッシュ
+        id: vvcache
+        uses: actions/cache@v4
+        with:
+          path: linux-cpu-x64
+          key: voicevox-engine-0.25.2
+
+      - name: VOICEVOXエンジン取得(初回のみ・約1.8GB)
+        if: steps.vvcache.outputs.cache-hit != 'true'
+        run: |
+          curl -sSL -o vv.7z https://github.com/VOICEVOX/voicevox_engine/releases/download/0.25.2/voicevox_engine-linux-cpu-x64-0.25.2.7z.001
+          7z x vv.7z
+          rm vv.7z
+
+      - name: VOICEVOX・フロントエンドを起動
+        run: |
+          chmod +x linux-cpu-x64/run
+          nohup ./linux-cpu-x64/run --host 127.0.0.1 --port 50021 > voicevox.log 2>&1 &
+          cd frontend && npm ci && nohup npm run dev > ../frontend.log 2>&1 &
+          cd ${{ github.workspace }}
+          for i in $(seq 1 90); do curl -sf http://127.0.0.1:50021/version > /dev/null && break; sleep 2; done
+          for i in $(seq 1 30); do curl -sf http://localhost:3000 -o /dev/null && break; sleep 2; done
+          curl -sf http://127.0.0.1:50021/version > /dev/null
+          curl -sf http://localhost:3000 -o /dev/null
+
+      - name: 自動プレイ録画 → ショート動画生成
+        # 第1レースの受付開始から録るため、バックエンドは録画直前に起動する
+        run: |
+          cd backend && nohup python -m uvicorn main:app --host 127.0.0.1 --port 8000 > ../backend.log 2>&1 &
+          cd ${{ github.workspace }}
+          sleep 5
+          python video_tools/record_play_vertical.py
+          python video_tools/make_shorts.py
+
+      - name: 動画をアップロード
+        uses: actions/upload-artifact@v4
+        with:
+          name: keiba-shorts
+          path: ${{ github.workspace }}/video_out/keiba_shorts.mp4
+
+      - name: 失敗時のログ
+        if: failure()
+        run: tail -50 voicevox.log frontend.log backend.log || true

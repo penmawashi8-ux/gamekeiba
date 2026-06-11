@@ -8,6 +8,7 @@ events_v.json のイベントログから:
 - 大きめの焼き込み字幕を付与
 """
 import json
+import os
 import subprocess
 import urllib.parse
 import urllib.request
@@ -17,12 +18,18 @@ import numpy as np
 
 VV = "http://127.0.0.1:50021"
 SPEAKER = 13  # 青山龍星
-OUT = "/home/user/video_work"
+OUT = os.environ.get("VIDEO_OUT", "/home/user/video_work")
 RAW = f"{OUT}/raw_v.webm"
 SRC = f"{OUT}/shorts_src.mp4"
 SUBS = f"{OUT}/subs_shorts.ass"
 BGM = f"{OUT}/bgm.wav"
 FINAL = f"{OUT}/keiba_shorts.mp4"
+
+# 冒頭のサイト紹介カード(ボドゲ広場 https://boardgamecat.com)
+INTRO_IMG = os.environ.get(
+    "INTRO_IMG",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "intro_shorts.png"))
+INTRO_SEC = 3.2
 
 STYLE = {
     "calm": {"speedScale": 1.25, "intonationScale": 1.2, "pitchScale": 0.0},
@@ -187,11 +194,11 @@ def main():
         (race_start_t - 1.2, third_t + 1.8),     # レース(スタート〜3着確定)
         (scrolled_t + 0.4, min(scrolled_t + 9.0, src_dur - 0.3)),  # 払い戻し
     ]
-    total = sum(b - a for a, b in segs)
+    total = INTRO_SEC + sum(b - a for a, b in segs)
     print("segments:", [(round(a, 1), round(b, 1)) for a, b in segs], "total", round(total, 1))
 
     def dst(src_t):
-        acc = 0.0
+        acc = INTRO_SEC
         for a, b in segs:
             if src_t <= b:
                 return acc + max(0.0, src_t - a)
@@ -214,8 +221,10 @@ def main():
         return "先頭" if i == 1 else f"{i}番手"
 
     lines = [
-        (0.4, "AIが競馬ゲームで全財産1万円、勝負します！", "hype"),
-        (4.2, f"買ったのは2番人気{name(my_win_horse)}の単勝と、"
+        # 冒頭カードはカード自体に文字があるので字幕なし(末尾フラグ False)
+        (0.4, "この競馬ゲームは、ボドゲ広場でいつでも遊べます！", "calm", False),
+        (INTRO_SEC + 0.3, "今日はAIが全財産1万円、勝負します！", "hype"),
+        (INTRO_SEC + 4.0, f"買ったのは2番人気{name(my_win_horse)}の単勝と、"
               f"1番人気{name(my_show_horse)}の複勝、5000円ずつ！", "calm"),
         (dst(race_start_t), "スタート！", "hype"),
         (dst(race_start_t) + 2.8, f"先頭は{name(leader_at(race_start_t + 4)[0])}！", "hype"),
@@ -242,19 +251,23 @@ def main():
     # ── 合成・スケジューリング ──
     clips = []
     cursor = 0.0
-    for i, (want, text, style) in enumerate(lines):
+    for i, line in enumerate(lines):
+        want, text, style = line[:3]
+        with_sub = line[3] if len(line) > 3 else True
         path = f"{OUT}/sline_{i:02d}.wav"
         dur = synth(text, style, path)
         start = max(want, cursor + 0.2)
         if start + dur > total - 0.2:
             start = max(cursor + 0.2, total - 0.2 - dur)
-        clips.append((start, dur, path, text, style))
+        clips.append((start, dur, path, text, style, with_sub))
         cursor = start + dur
         print(f"{i:2d} {start:6.2f} +{dur:5.2f} {text[:22]}")
 
     with open(SUBS, "w") as f:
         f.write(ASS_HEADER)
-        for start, dur, _, text, style in clips:
+        for start, dur, _, text, style, with_sub in clips:
+            if not with_sub:
+                continue
             f.write(f"Dialogue: 0,{ass_time(start)},{ass_time(min(start + dur + 0.3, total))},"
                     f"{style},,0,0,0,,{wrap_jp(text)}\n")
 
@@ -265,9 +278,10 @@ def main():
                     "-c:v", "libx264", "-preset", "fast", "-crf", "20",
                     "-pix_fmt", "yuv420p", SRC], check=True)
 
-    # カット編集 + 拡大 + 字幕 + 音声ミックス を1パスで
-    cmd = ["ffmpeg", "-y", "-v", "error", "-i", SRC]
-    for _, _, p, _, _ in clips:
+    # イントロカード + カット編集 + 拡大 + 字幕 + 音声ミックス を1パスで
+    cmd = ["ffmpeg", "-y", "-v", "error", "-i", SRC,
+           "-loop", "1", "-framerate", "30", "-t", f"{INTRO_SEC}", "-i", INTRO_IMG]
+    for _, _, p, _, _, _ in clips:
         cmd += ["-i", p]
     cmd += ["-i", BGM]
     n = len(clips)
@@ -276,12 +290,14 @@ def main():
         fc.append(f"[0:v]trim={a:.3f}:{b:.3f},setpts=PTS-STARTPTS[v{i}]")
     fc.append("".join(f"[v{i}]" for i in range(len(segs))) +
               f"concat=n={len(segs)}:v=1:a=0[vc]")
-    fc.append(f"[vc]scale=1080:1920:flags=lanczos,ass={SUBS}[vout]")
+    fc.append(f"[vc]scale=1080:1920:flags=lanczos[vs]")
+    fc.append("[1:v]scale=1080:1920,setsar=1[vi]")
+    fc.append(f"[vi][vs]concat=n=2:v=1:a=0,format=yuv420p,ass={SUBS}[vout]")
     for i, (start, *_r) in enumerate(clips):
-        fc.append(f"[{i+1}:a]adelay={int(start*1000)}:all=1[na{i}]")
-    fc.append(f"[{n+1}:a]volume=0.13[bgm]")
+        fc.append(f"[{i+2}:a]adelay={int(start*1000)}:all=1[na{i}]")
+    fc.append(f"[{n+2}:a]volume=0.13[bgm]")
     fc.append("".join(f"[na{i}]" for i in range(n)) + "[bgm]" +
-              f"amix=inputs={n+1}:normalize=0[aout]")
+              f"amix=inputs={n+1}:normalize=0,volume=5dB[aout]")
     cmd += ["-filter_complex", ";".join(fc), "-map", "[vout]", "-map", "[aout]",
             "-c:v", "libx264", "-preset", "fast", "-crf", "21", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-b:a", "160k", "-ar", "44100", "-t", f"{total:.3f}", FINAL]
