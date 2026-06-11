@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: システム依存パッケージ
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-noto-cjk p7zip-full
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-noto-cjk p7zip-full psmisc
 
       - uses: actions/setup-python@v5
         with:
@@ -41,32 +41,19 @@ jobs:
           7z x vv.7z
           rm vv.7z
 
-      - name: VOICEVOX・フロントエンドを起動
+      - name: ショート動画 + タイトル・説明文を生成
         run: |
-          chmod +x linux-cpu-x64/run
-          nohup ./linux-cpu-x64/run --host 127.0.0.1 --port 50021 > voicevox.log 2>&1 &
-          cd frontend && npm ci && nohup npm run dev > ../frontend.log 2>&1 &
-          cd ${{ github.workspace }}
-          for i in $(seq 1 90); do curl -sf http://127.0.0.1:50021/version > /dev/null && break; sleep 2; done
-          for i in $(seq 1 30); do curl -sf http://localhost:3000 -o /dev/null && break; sleep 2; done
-          curl -sf http://127.0.0.1:50021/version > /dev/null
-          curl -sf http://localhost:3000 -o /dev/null
+          chmod +x linux-cpu-x64/run video_tools/run_pipeline.sh
+          VOICEVOX_RUN=./linux-cpu-x64/run ./video_tools/run_pipeline.sh
 
-      - name: 自動プレイ録画 → ショート動画生成
-        # 第1レースの受付開始から録るため、バックエンドは録画直前に起動する
-        run: |
-          cd backend && nohup python -m uvicorn main:app --host 127.0.0.1 --port 8000 > ../backend.log 2>&1 &
-          cd ${{ github.workspace }}
-          sleep 5
-          python video_tools/record_play_vertical.py
-          python video_tools/make_shorts.py
-
-      - name: 動画をアップロード
+      - name: 動画とメタデータをアップロード
         uses: actions/upload-artifact@v4
         with:
           name: keiba-shorts
-          path: ${{ github.workspace }}/video_out/keiba_shorts.mp4
+          path: |
+            ${{ github.workspace }}/video_out/keiba_shorts.mp4
+            ${{ github.workspace }}/video_out/metadata.md
 
       - name: 失敗時のログ
         if: failure()
-        run: tail -50 voicevox.log frontend.log backend.log || true
+        run: tail -50 ${{ env.VIDEO_OUT }}/*.log || true

@@ -24,6 +24,7 @@ SRC = f"{OUT}/shorts_src.mp4"
 SUBS = f"{OUT}/subs_shorts.ass"
 BGM = f"{OUT}/bgm.wav"
 FINAL = f"{OUT}/keiba_shorts.mp4"
+METADATA = f"{OUT}/metadata.md"
 
 # 冒頭のサイト紹介カード(ボドゲ広場 https://boardgamecat.com)
 INTRO_IMG = os.environ.get(
@@ -147,6 +148,50 @@ def make_bgm(path, duration):
         w.writeframes((sig * 32767).astype(np.int16).tobytes())
 
 
+def write_metadata(win_hit, show_hit, total_payout, final_balance,
+                   win_name, show_name, ranking, name):
+    """レース結果に合わせたタイトル・説明文を生成する"""
+    if win_hit and show_hit:
+        title = "AIが競馬ゲームで持ちコイン全部賭けたら大勝ちした【AI実況】"
+        hook = f"単勝も複勝もダブル的中で払い戻し{total_payout:,}コイン!"
+    elif show_hit or win_hit:
+        title = "AIが競馬ゲームで持ちコイン全部賭けた結果…【AI実況】"
+        hook = f"結果はギリギリ…{total_payout:,}コイン回収。"
+    else:
+        title = "AIが競馬ゲームで持ちコイン全部賭けたら全部消えた【AI実況】"
+        hook = "結果はまさかの全滅…。"
+
+    alt_titles = [
+        f"【全コインオールイン】AIに競馬ゲームで勝負させてみた🏇",
+        f"1万コイン→{final_balance:,}コイン。これが競馬です【AI実況ショート】",
+    ]
+    desc = f"""AIが視聴者参加型のリアルタイム競馬ゲームに挑戦!
+持ちコイン1万を1レースに全額オールイン。
+2番人気{win_name}の単勝と、1番人気{show_name}の複勝で勝負した結果は…?
+{hook}
+
+🏇 このゲームはここから遊べます
+→ https://boardgamecat.com 「ボドゲ広場」
+
+・参加者のベットでオッズがリアルタイムに変動するパリミュチュエル方式
+・ブラウザでそのまま遊べます
+
+※このゲームで使うのはすべてゲーム内コインです。
+　実際のお金を賭けるものではありません。
+
+実況音声: VOICEVOX:青山龍星
+
+#Shorts #競馬ゲーム #ブラウザゲーム #AI実況 #ボドゲ広場"""
+
+    with open(METADATA, "w") as f:
+        f.write(f"# 動画タイトル\n\n{title}\n\n## タイトル別案\n\n")
+        f.write("".join(f"- {t}\n" for t in alt_titles))
+        f.write(f"\n# 説明文\n\n```\n{desc}\n```\n")
+        f.write(f"\n# レース結果メモ\n\n- 1着: {name(ranking[0])} / 2着: {name(ranking[1])} / 3着: {name(ranking[2])}\n")
+        f.write(f"- 払い戻し: {total_payout:,}コイン / 最終残高: {final_balance:,}コイン\n")
+    print("metadata:", METADATA)
+
+
 def main():
     ev = json.load(open(f"{OUT}/events_v.json"))
     t0 = next(e["t"] for e in ev if e["kind"] == "video_open")
@@ -211,6 +256,10 @@ def main():
     win_hit = any(p["bet_type"] == "win" for p in payouts)
     show_hit = any(p["bet_type"] == "show" for p in payouts)
     total_payout = sum(p["payout_amount"] for p in payouts)
+    final_balance = next((b for n, b in results_e["data"]["leaderboard"] if n == "クロードAI"),
+                         total_payout)
+    write_metadata(win_hit, show_hit, total_payout, final_balance,
+                   name(my_win_horse), name(my_show_horse), ranking, name)
 
     mid_t = t_lead_frac(0.55)
     charge = next((tv(e) for e in updates
