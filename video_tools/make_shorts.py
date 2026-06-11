@@ -46,6 +46,8 @@ WrapStyle: 0
 Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, BorderStyle, Encoding
 Style: calm,Noto Sans CJK JP,62,&H00FFFFFF,&H00000000,&H7F000000,1,4,2,2,40,40,400,1,1
 Style: hype,Noto Sans CJK JP,68,&H0000E6FF,&H00000000,&H7F000000,1,4,2,2,40,40,400,1,1
+Style: note,Noto Sans CJK JP,34,&H00E8F4EC,&H78000000,&H78000000,1,7,0,8,40,40,128,3,1
+Style: bet,Noto Sans CJK JP,46,&H00FFFFFF,&H58000000,&H58000000,1,14,0,8,40,40,800,3,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -223,9 +225,9 @@ def main():
     lines = [
         # 冒頭カードはカード自体に文字があるので字幕なし(末尾フラグ False)
         (0.4, "この競馬ゲームは、ボドゲ広場でいつでも遊べます！", "calm", False),
-        (INTRO_SEC + 0.3, "今日はAIが全財産1万円、勝負します！", "hype"),
+        (INTRO_SEC + 0.3, "今日はAIが持ちコイン全部、1万コインで勝負します！", "hype"),
         (INTRO_SEC + 4.0, f"買ったのは2番人気{name(my_win_horse)}の単勝と、"
-              f"1番人気{name(my_show_horse)}の複勝、5000円ずつ！", "calm"),
+              f"1番人気{name(my_show_horse)}の複勝、5000コインずつ！", "calm"),
         (dst(race_start_t), "スタート！", "hype"),
         (dst(race_start_t) + 2.8, f"先頭は{name(leader_at(race_start_t + 4)[0])}！", "hype"),
         (dst(mid_t), f"レースは中盤、{name(my_win_horse)}は{pos_phrase(mid_t, my_win_horse)}、"
@@ -236,16 +238,16 @@ def main():
     ]
     seg3_t = dst(segs[2][0] + 0.1)
     if win_hit and show_hit:
-        lines += [(seg3_t + 0.6, f"単勝も複勝もダブル的中！払い戻し{total_payout}円！", "hype"),
-                  (seg3_t + 5.0, "全財産勝負、大勝利です！次のレースもお楽しみに！", "calm")]
+        lines += [(seg3_t + 0.6, f"単勝も複勝もダブル的中！払い戻し{total_payout}コイン！", "hype"),
+                  (seg3_t + 5.0, "全コイン勝負、大勝利です！次のレースもお楽しみに！", "calm")]
     elif show_hit:
-        lines += [(seg3_t + 0.6, f"単勝は外れ…でも複勝が的中して{total_payout}円回収！", "calm"),
-                  (seg3_t + 5.0, "1万円が6500円に。これが競馬です。リベンジするぞ！", "calm")]
+        lines += [(seg3_t + 0.6, f"単勝は外れ…でも複勝が的中して{total_payout}コイン回収！", "calm"),
+                  (seg3_t + 5.0, f"1万コインが{total_payout}コインに。これが競馬です。リベンジするぞ！", "calm")]
     elif win_hit:
-        lines += [(seg3_t + 0.6, f"単勝的中！払い戻し{total_payout}円！", "hype"),
-                  (seg3_t + 5.0, "全財産勝負、勝ちました！次のレースもお楽しみに！", "calm")]
+        lines += [(seg3_t + 0.6, f"単勝的中！払い戻し{total_payout}コイン！", "hype"),
+                  (seg3_t + 5.0, "全コイン勝負、勝ちました！次のレースもお楽しみに！", "calm")]
     else:
-        lines += [(seg3_t + 0.6, "単勝も複勝も外れ…全財産が消えました…", "calm"),
+        lines += [(seg3_t + 0.6, "単勝も複勝も外れ…持ちコインが消えました…", "calm"),
                   (seg3_t + 5.0, "これが競馬です。リベンジは次の動画で！", "calm")]
 
     # ── 合成・スケジューリング ──
@@ -270,6 +272,14 @@ def main():
                 continue
             f.write(f"Dialogue: 0,{ass_time(start)},{ass_time(min(start + dur + 0.3, total))},"
                     f"{style},,0,0,0,,{wrap_jp(text)}\n")
+        # ゲーム内通貨であることの常時注記(イントロカード以降)
+        f.write(f"Dialogue: 0,{ass_time(INTRO_SEC)},{ass_time(total)},note,,0,0,0,,"
+                f"※ゲーム内通貨です(実際のお金は賭けていません)\n")
+        # レース中に購入馬券を表示するバナー
+        race_a, race_b = dst(segs[1][0]), dst(segs[1][1])
+        f.write(f"Dialogue: 0,{ass_time(race_a)},{ass_time(race_b)},bet,,0,0,0,,"
+                f"単勝 ▶ {my_win_horse} {name(my_win_horse)}\\N"
+                f"複勝 ▶ {my_show_horse} {name(my_show_horse)}\n")
 
     make_bgm(BGM, total)
 
