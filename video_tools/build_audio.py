@@ -11,7 +11,47 @@ VV = "http://127.0.0.1:50021"
 SPEAKER = 13  # 青山龍星
 OUT = "/home/user/video_work"
 VIDEO = f"{OUT}/video_nosound.mp4"
+SUBS = f"{OUT}/subs.ass"
 FINAL = f"{OUT}/keiba_jikkyo.mp4"
+
+ASS_HEADER = """[Script Info]
+ScriptType: v4.00+
+PlayResX: 1280
+PlayResY: 720
+WrapStyle: 0
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, BorderStyle, Encoding
+Style: calm,Noto Sans CJK JP,34,&H00FFFFFF,&H00000000,&H7F000000,1,2.5,1,2,60,60,26,1,1
+Style: hype,Noto Sans CJK JP,36,&H0000E6FF,&H00000000,&H7F000000,1,2.5,1,2,60,60,26,1,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+
+
+def ass_time(sec):
+    h, rem = divmod(sec, 3600)
+    m, s = divmod(rem, 60)
+    return f"{int(h)}:{int(m):02d}:{s:05.2f}"
+
+
+def wrap_jp(text, width=28):
+    """libassがCJKを自動改行しないため、句読点を優先しつつ width 文字で折り返す"""
+    lines, cur = [], ""
+    for ch in text:
+        cur += ch
+        if len(cur) >= width:
+            cut = max(cur.rfind(p) for p in "、。！？")
+            if cut >= width // 2:
+                lines.append(cur[:cut + 1])
+                cur = cur[cut + 1:]
+            else:
+                lines.append(cur)
+                cur = ""
+    if cur:
+        lines.append(cur)
+    return "\\N".join(lines)
 
 # (開始希望秒, テキスト, スタイル)  スタイル: calm=通常 / hype=レース実況
 LINES = [
@@ -61,7 +101,7 @@ def main():
     dur_video = float(subprocess.check_output(
         ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", VIDEO]))
 
-    clips = []   # (start_sec, path)
+    clips = []   # (start_sec, dur, path, text, style)
     cursor = 0.0
     for i, (want, text, style) in enumerate(LINES):
         path = f"{OUT}/line_{i:02d}.wav"
@@ -69,21 +109,30 @@ def main():
         start = max(want, cursor + 0.25)
         if start + dur > dur_video - 0.2:
             start = max(cursor + 0.25, dur_video - 0.2 - dur)
-        clips.append((start, path))
+        clips.append((start, dur, path, text, style))
         cursor = start + dur
         print(f"{i:2d} start={start:6.2f} dur={dur:5.2f} (希望 {want}) {text[:18]}…")
 
+    # 字幕(セリフと同じタイミングで表示、読み終わり余韻0.3秒)
+    with open(SUBS, "w") as f:
+        f.write(ASS_HEADER)
+        for start, dur, _, text, style in clips:
+            end = min(start + dur + 0.3, dur_video)
+            f.write(f"Dialogue: 0,{ass_time(start)},{ass_time(end)},{style},,0,0,0,,{wrap_jp(text)}\n")
+
     cmd = ["ffmpeg", "-y", "-v", "error", "-i", VIDEO]
-    for _, p in clips:
+    for _, _, p, _, _ in clips:
         cmd += ["-i", p]
     parts, labels = [], []
-    for i, (start, _) in enumerate(clips):
+    for i, (start, *_rest) in enumerate(clips):
         ms = int(start * 1000)
         parts.append(f"[{i+1}:a]adelay={ms}:all=1[a{i}]")
         labels.append(f"[a{i}]")
     fc = ";".join(parts) + f";{''.join(labels)}amix=inputs={len(clips)}:normalize=0[aout]"
-    cmd += ["-filter_complex", fc, "-map", "0:v", "-map", "[aout]",
-            "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-ar", "44100", FINAL]
+    fc += f";[0:v]ass={SUBS}[vout]"
+    cmd += ["-filter_complex", fc, "-map", "[vout]", "-map", "[aout]",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "20", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", "160k", "-ar", "44100", FINAL]
     subprocess.run(cmd, check=True)
     print("done:", FINAL)
 
