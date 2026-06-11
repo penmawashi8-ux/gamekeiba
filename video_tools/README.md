@@ -3,7 +3,8 @@
 Webアプリ版(frontend + backend)を自動プレイし、VOICEVOXによる自動音声実況付きの
 プレイ動画(MP4)を生成するパイプラインです。
 
-`sample_keiba_jikkyo.mp4` が生成サンプル(約2分)です。
+- `sample_keiba_jikkyo.mp4` — 横長版サンプル(1280x720・約2分)
+- `sample_keiba_shorts.mp4` — YouTubeショート向け縦版サンプル(1080x1920・約56秒)
 
 ## 仕組み
 
@@ -44,3 +45,22 @@ python3 video_tools/build_audio.py
 注意: `build_audio.py` の台本(`LINES`)はサンプル収録時のレース展開
 (出走馬名・着順・タイムスタンプ)に合わせて書かれています。
 別のテイクを録る場合は `events.json` の内容に合わせて台本を更新してください。
+
+## YouTubeショート向け縦動画
+
+```bash
+# 縦向き(540x960)で自動プレイ+録画 → raw_v.webm / events_v.json
+python3 video_tools/record_play_vertical.py
+
+# カット編集 + 実況自動生成 + BGM + 字幕 → keiba_shorts.mp4(1080x1920・約56秒)
+python3 video_tools/make_shorts.py
+```
+
+`make_shorts.py` は横長版と違い**完全自動**です:
+
+- イベントログから「オッズ発表〜ベット」「レース」「払い戻し」だけを残して
+  ログインや待ち時間をカット(約56秒に圧縮)
+- 実況台本はレース展開(先頭の入れ替わり・自分の馬の位置・的中/外れ)から自動生成。
+  どんな結果のテイクでもそのまま動画化できます
+- BGMはnumpyで合成したチップチューン風ループ(著作権フリー)を低音量でミックス
+- 字幕は縦画面向けに大きめで焼き込み
