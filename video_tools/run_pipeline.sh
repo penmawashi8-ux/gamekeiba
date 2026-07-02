@@ -52,7 +52,11 @@ sleep 1
 rm -f "$ROOT/backend/users.db"
 (cd "$ROOT/backend" && nohup python3 -m uvicorn main:app --host 127.0.0.1 --port 8000 \
   > "$VIDEO_OUT/backend.log" 2>&1 &)
-sleep 4
+if ! wait_http http://127.0.0.1:8000/health 30; then
+  echo "--- backend.log ---" >&2
+  tail -n 30 "$VIDEO_OUT/backend.log" >&2 || true
+  exit 1
+fi
 
 # 4. 録画 → 動画 + メタデータ生成
 python3 "$ROOT/video_tools/record_play_vertical.py"

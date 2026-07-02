@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """競馬ゲームを自動プレイし、Playwrightで録画 + イベントログを記録する"""
 import asyncio
+import datetime
 import json
 import os
 import shutil
@@ -25,7 +26,16 @@ def log(kind, payload=None):
 
 
 async def spy_task():
-    async with websockets.connect(WS_URL) as ws:
+    ws = None
+    for attempt in range(15):  # バックエンド起動直後でも接続できるようリトライ
+        try:
+            ws = await websockets.connect(WS_URL)
+            break
+        except OSError:
+            await asyncio.sleep(1)
+    if ws is None:
+        raise RuntimeError("バックエンド(ws://localhost:8000)に接続できません")
+    async with ws:
         await ws.send(json.dumps({"type": "join", "name": "ギャラリー", "session_id": "spy-00000000"}))
         async for raw in ws:
             msg = json.loads(raw)
@@ -86,6 +96,9 @@ async def main():
             locale="ja-JP", timezone_id="Asia/Tokyo",
         )
         page = await ctx.new_page()
+        # 深夜帯(JST 1〜8時)はおやすみ画面になるため、ページの時計をJST正午に固定する
+        # (タイマーは動き続けるので、ゲームの進行・アニメーションには影響しない)
+        await page.clock.set_fixed_time(datetime.datetime(2026, 1, 1, 3, 0, 0))  # UTC 3時 = JST 12時
         log("video_open")
         await page.goto(APP_URL)
         await page.wait_for_timeout(1500)

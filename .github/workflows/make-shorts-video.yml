@@ -60,4 +60,4 @@ jobs:
 
       - name: 失敗時のログ
         if: failure()
-        run: tail -50 ${{ env.VIDEO_OUT }}/*.log || true
+        run: tail -n 50 ${{ env.VIDEO_OUT }}/*.log || true
