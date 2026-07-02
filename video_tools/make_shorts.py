@@ -49,6 +49,7 @@ Style: calm,Noto Sans CJK JP,62,&H00FFFFFF,&H00000000,&H7F000000,1,4,2,2,40,40,4
 Style: hype,Noto Sans CJK JP,68,&H0000E6FF,&H00000000,&H7F000000,1,4,2,2,40,40,400,1,1
 Style: note,Noto Sans CJK JP,34,&H00E8F4EC,&H78000000,&H78000000,1,7,0,8,40,40,128,3,1
 Style: bet,Noto Sans CJK JP,46,&H00FFFFFF,&H58000000,&H58000000,1,14,0,8,40,40,800,3,1
+Style: speed,Noto Sans CJK JP,44,&H0000E6FF,&H58000000,&H58000000,1,10,0,9,40,40,190,3,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -235,21 +236,28 @@ def main():
     src_dur = float(subprocess.check_output(
         ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", RAW]))
 
-    # ── 編集セグメント(元動画の秒数)──
+    # ── 編集セグメント(元動画の秒数, 再生速度)──
+    # レース中盤は倍速で流す。スタート直後とゴール前の直線は等速で見せる
+    SPEED = 2.0
+    fast_a = race_start_t + 4.0
+    fast_b = max(min(t_lead_frac(0.72), third_t - 2.5), fast_a + 2.0)
     segs = [
-        (odds_t - 0.8, tv(bet_show) + 3.0),      # オッズ発表〜ベット完了
-        (race_start_t - 1.2, third_t + 1.8),     # レース(スタート〜3着確定)
-        (scrolled_t + 0.4, min(scrolled_t + 9.0, src_dur - 0.3)),  # 払い戻し
+        (odds_t - 0.8, tv(bet_show) + 3.0, 1.0),   # オッズ発表〜ベット完了
+        (race_start_t - 1.2, fast_a, 1.0),         # スタート直後
+        (fast_a, fast_b, SPEED),                   # 中盤(倍速)
+        (fast_b, third_t + 1.8, 1.0),              # 直線〜3着確定
+        (scrolled_t + 0.4, min(scrolled_t + 9.0, src_dur - 0.3), 1.0),  # 払い戻し
     ]
-    total = INTRO_SEC + sum(b - a for a, b in segs)
-    print("segments:", [(round(a, 1), round(b, 1)) for a, b in segs], "total", round(total, 1))
+    segs = [(max(0.0, a), b, s) for a, b, s in segs]
+    total = INTRO_SEC + sum((b - a) / s for a, b, s in segs)
+    print("segments:", [(round(a, 1), round(b, 1), s) for a, b, s in segs], "total", round(total, 1))
 
     def dst(src_t):
         acc = INTRO_SEC
-        for a, b in segs:
+        for a, b, s in segs:
             if src_t <= b:
-                return acc + max(0.0, src_t - a)
-            acc += b - a
+                return acc + max(0.0, src_t - a) / s
+            acc += (b - a) / s
         return acc
 
     # ── 実況台本の自動生成 ──
@@ -285,7 +293,7 @@ def main():
         (dst(goal_t) + 0.2, f"{name(ranking[0])}、1着でゴールイン！", "hype"),
         (dst(third_t) + 0.3, f"2着{name(ranking[1])}、3着{name(ranking[2])}！", "hype"),
     ]
-    seg3_t = dst(segs[2][0] + 0.1)
+    seg3_t = dst(segs[-1][0] + 0.1)
     if win_hit and show_hit:
         lines += [(seg3_t + 0.6, f"単勝も複勝もダブル的中！払い戻し{total_payout}コイン！", "hype"),
                   (seg3_t + 5.0, "全コイン勝負、大勝利です！次のレースもお楽しみに！", "calm")]
@@ -325,10 +333,13 @@ def main():
         f.write(f"Dialogue: 0,{ass_time(INTRO_SEC)},{ass_time(total)},note,,0,0,0,,"
                 f"※ゲーム内通貨です(実際のお金は賭けていません)\n")
         # レース中に購入馬券を表示するバナー
-        race_a, race_b = dst(segs[1][0]), dst(segs[1][1])
+        race_a, race_b = dst(race_start_t - 1.2), dst(third_t + 1.8)
         f.write(f"Dialogue: 0,{ass_time(race_a)},{ass_time(race_b)},bet,,0,0,0,,"
                 f"単勝 ▶ {my_win_horse} {name(my_win_horse)}\\N"
                 f"複勝 ▶ {my_show_horse} {name(my_show_horse)}\n")
+        # 倍速区間のラベル
+        f.write(f"Dialogue: 0,{ass_time(dst(fast_a) + 0.01)},{ass_time(dst(fast_b))},speed,,0,0,0,,"
+                f"▶▶ 2倍速中\n")
 
     make_bgm(BGM, total)
 
@@ -345,11 +356,11 @@ def main():
     cmd += ["-i", BGM]
     n = len(clips)
     fc = []
-    for i, (a, b) in enumerate(segs):
-        fc.append(f"[0:v]trim={a:.3f}:{b:.3f},setpts=PTS-STARTPTS[v{i}]")
+    for i, (a, b, s) in enumerate(segs):
+        fc.append(f"[0:v]trim={a:.3f}:{b:.3f},setpts=(PTS-STARTPTS)/{s}[v{i}]")
     fc.append("".join(f"[v{i}]" for i in range(len(segs))) +
               f"concat=n={len(segs)}:v=1:a=0[vc]")
-    fc.append(f"[vc]scale=1080:1920:flags=lanczos[vs]")
+    fc.append(f"[vc]fps=30,scale=1080:1920:flags=lanczos[vs]")
     fc.append("[1:v]scale=1080:1920,setsar=1[vi]")
     fc.append(f"[vi][vs]concat=n=2:v=1:a=0,format=yuv420p,ass={SUBS}[vout]")
     for i, (start, *_r) in enumerate(clips):
