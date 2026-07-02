@@ -50,7 +50,8 @@ wait_http http://localhost:3000 30
 fuser -k 8000/tcp 2>/dev/null || true
 sleep 1
 rm -f "$ROOT/backend/users.db"
-(cd "$ROOT/backend" && nohup python3 -m uvicorn main:app --host 127.0.0.1 --port 8000 \
+# NIGHT_START_JST=0: JST夜間帯(1〜8時)の起動拒否を録画用に無効化
+(cd "$ROOT/backend" && NIGHT_START_JST=0 nohup python3 -m uvicorn main:app --host 127.0.0.1 --port 8000 \
   > "$VIDEO_OUT/backend.log" 2>&1 &)
 if ! wait_http http://127.0.0.1:8000/health 30; then
   echo "--- backend.log ---" >&2
