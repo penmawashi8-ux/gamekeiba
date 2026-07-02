@@ -1,9 +1,13 @@
 name: ショート動画生成
 
 # Actionsタブ → このワークフロー → 「Run workflow」で手動実行。
+# または run-video/ で始まるブランチをpushしても起動する
+# (API経由でworkflow_dispatchを叩けない連携ツール用の入口)。
 # 完了後、実行結果ページの Artifacts から keiba-shorts をダウンロード。
 on:
   workflow_dispatch:
+  push:
+    branches: ["run-video/**"]
 
 jobs:
   video:
