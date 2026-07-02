@@ -50,6 +50,10 @@ jobs:
           chmod +x linux-cpu-x64/run video_tools/run_pipeline.sh
           VOICEVOX_RUN=./linux-cpu-x64/run ./video_tools/run_pipeline.sh
 
+      - name: タイトル・説明文を実行ページに表示
+        # 実行結果ページの Summary にそのまま表示され、コピペできる
+        run: cat "$VIDEO_OUT/metadata.md" >> "$GITHUB_STEP_SUMMARY"
+
       - name: 動画とメタデータをアップロード
         uses: actions/upload-artifact@v4
         with:
