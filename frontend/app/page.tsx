@@ -136,7 +136,9 @@ export default function Home() {
   const [toast, setToast] = useState<{ msg: string; type: 'win' | 'lose' } | null>(null)
   const [brokeAcknowledged, setBrokeAcknowledged] = useState(false)
   const [isNight, setIsNight] = useState(false)
-  const { game, user, connected, error, restoreError, payoutSettled, placeBet, requestRestore } = useGameSocket(playerName)
+  // 夜間は接続しない（サーバーは休止中。無駄な再接続でインスタンスを起こさない）
+  const { game, user, connected, error, restoreError, payoutSettled, placeBet, requestRestore } =
+    useGameSocket(isNight ? null : playerName)
 
   useEffect(() => {
     const check = () => setIsNight(isNightJST())

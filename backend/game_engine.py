@@ -35,6 +35,8 @@ class GameEngine:
         self.users    = UserManager()
 
         self.phase        = "waiting"
+        # True の間はレースを進めない（夜間休止など）。プロセスは落とさない
+        self.paused       = False
         self.horses: List[Horse] = []
         self.race_results: List[int] = []
         self.countdown    = 0
@@ -44,6 +46,10 @@ class GameEngine:
     async def run(self):
         while True:
             try:
+                if self.paused:
+                    self.phase = "waiting"
+                    await asyncio.sleep(10)
+                    continue
                 await self._betting_phase()
                 await self._racing_phase()
                 await self._results_phase()

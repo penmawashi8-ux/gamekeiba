@@ -56,6 +56,16 @@ class ConnManager:
         for uid in dead:
             self._conns.pop(uid, None)
 
+    async def close_all(self, msg: dict | None = None):
+        for uid, ws in list(self._conns.items()):
+            try:
+                if msg:
+                    await ws.send_text(json.dumps(msg, ensure_ascii=False))
+                await ws.close(code=1001)
+            except Exception:
+                pass
+            self._conns.pop(uid, None)
+
     def add(self, user_id: str, ws: WebSocket):
         self._conns[user_id] = ws
 
@@ -73,6 +83,15 @@ engine: GameEngine = None   # type: ignore[assignment]
 MAX_RUNTIME_HOURS     = float(os.environ.get("MAX_RUNTIME_HOURS",     "0"))
 IDLE_SHUTDOWN_MINUTES = float(os.environ.get("IDLE_SHUTDOWN_MINUTES", "0"))
 
+# 休止のしかた。
+#   0 (既定, Render): プロセスは生かしたままレースだけ止める「休止モード」。
+#   1 (Railway など): 従来どおり os._exit(0) でプロセスごと終了する。
+# Render はプロセスが終了すると "Application exited early" の障害アラートを送り、
+# インスタンスを自動再起動する。起動直後にまた終了すると再起動ループになるため、
+# Render では終了させないのが正しい。無課金プランは無通信15分で自動スリープする
+# ので、休止モードでもインスタンス時間は消費しない。
+EXIT_ON_SHUTDOWN = os.environ.get("EXIT_ON_SHUTDOWN", "0") == "1"
+
 # JST夜間停止（例: 1〜8時）。0にすると無効
 _JST = datetime.timezone(datetime.timedelta(hours=9))
 NIGHT_START_JST = int(os.environ.get("NIGHT_START_JST", "1"))
@@ -84,12 +103,34 @@ def _is_night_jst() -> bool:
     return NIGHT_START_JST > 0 and NIGHT_START_JST <= hour < NIGHT_END_JST
 
 
-if _is_night_jst():
-    logger.info("JST夜間帯 (%02d:00-%02d:00) のため起動しません", NIGHT_START_JST, NIGHT_END_JST)
-    os._exit(0)
-
 _idle_since: float | None = None
 _had_users  = False
+# 休止中はその理由が入る（"night" / "idle" / "max_runtime"）。None なら稼働中
+_dormant_reason: str | None = None
+
+
+def _set_dormant(reason: str):
+    """レースを止めて休止する。EXIT_ON_SHUTDOWN=1 のときだけプロセスを終了する。"""
+    global _dormant_reason
+    if EXIT_ON_SHUTDOWN:
+        logger.info("シャットダウンします (%s)", reason)
+        os._exit(0)
+    if _dormant_reason:
+        return
+    _dormant_reason = reason
+    if engine:
+        engine.paused = True
+    logger.info("休止モードに入りました (%s)", reason)
+
+
+def _wake():
+    global _dormant_reason
+    if not _dormant_reason:
+        return
+    logger.info("休止モードを解除しました (%s から復帰)", _dormant_reason)
+    _dormant_reason = None
+    if engine:
+        engine.paused = False
 
 
 def _on_user_connect():
@@ -108,18 +149,21 @@ async def _auto_shutdown():
     if MAX_RUNTIME_HOURS <= 0:
         return
     await asyncio.sleep(MAX_RUNTIME_HOURS * 3600)
-    logger.info("MAX_RUNTIME_HOURS reached — shutting down")
-    os._exit(0)
+    _set_dormant("max_runtime")
 
 
-async def _night_shutdown_watcher():
+async def _night_watcher():
     if NIGHT_START_JST <= 0:
         return
     while True:
         await asyncio.sleep(60)
         if _is_night_jst():
-            logger.info("JST夜間帯に入りました (%02d:00) — シャットダウン", NIGHT_START_JST)
-            os._exit(0)
+            if _dormant_reason != "night":
+                _set_dormant("night")
+                # 接続中のクライアントを切る（フロントは未接続なら「おやすみ中」を出す）
+                await manager.close_all({"type": "night"})
+        elif _dormant_reason == "night":
+            _wake()
 
 
 async def _idle_shutdown_watcher():
@@ -127,27 +171,29 @@ async def _idle_shutdown_watcher():
         return
     while True:
         await asyncio.sleep(30)
-        if _idle_since is not None:
+        if _idle_since is not None and _dormant_reason is None:
             elapsed_min = (time.monotonic() - _idle_since) / 60
             if elapsed_min >= IDLE_SHUTDOWN_MINUTES:
-                logger.info("No users for %.0f min — shutting down", elapsed_min)
-                os._exit(0)
+                _set_dormant("idle")
 
 
 @app.on_event("startup")
 async def startup():
     global engine
     engine = GameEngine(manager.broadcast, manager.send)
+    if _is_night_jst():
+        # 夜間に起動した場合は休止状態で待機する（従来はここでプロセスを終了していた）
+        _set_dormant("night")
     asyncio.create_task(engine.run())
     asyncio.create_task(_auto_shutdown())
     asyncio.create_task(_idle_shutdown_watcher())
-    asyncio.create_task(_night_shutdown_watcher())
+    asyncio.create_task(_night_watcher())
     logger.info("Game engine started")
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "dormant": _dormant_reason}
 
 
 # ── WebSocket endpoint ────────────────────────────────────────────────
@@ -156,6 +202,16 @@ def health():
 async def ws_endpoint(websocket: WebSocket):
     await websocket.accept()
     user_id: str = ""
+
+    if _is_night_jst():
+        # 夜間は接続を受けない。フロントは未接続なら「おやすみ中」画面を出す
+        await websocket.send_text(json.dumps({"type": "night"}, ensure_ascii=False))
+        await websocket.close(code=1001)
+        return
+
+    # アイドル休止中に誰か来たら再開する
+    if _dormant_reason in ("idle", "max_runtime"):
+        _wake()
 
     try:
         raw = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
