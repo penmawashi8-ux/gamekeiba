@@ -207,6 +207,10 @@ export function useGameSocket(playerName: string | null) {
       destroyed.current = true
       if (retryRef.current) clearTimeout(retryRef.current)
       wsRef.current?.close()
+      // onclose は destroyed.current を見て早期 return するので、ここで落とす。
+      // これがないと夜間に切り替わったとき connected が true のままになり、
+      // 「おやすみ中」画面に切り替わらない
+      setConnected(false)
     }
   }, [playerName])
 
