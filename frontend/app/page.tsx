@@ -72,10 +72,14 @@ function PhaseBar({ phase, countdown, raceNumber }: { phase: string; countdown: 
   )
 }
 
-const NIGHT_START_JST = 1
+// 夜間休止。0 で無効（既定）。バックエンドの NIGHT_START_JST と揃えること。
+// Render の無課金プランは無通信15分で自動スリープするため夜間に止める意味がなく、
+// 「おやすみ中」を出している時間帯のほうが機会損失になるので24時間営業にした。
+const NIGHT_START_JST = 0
 const NIGHT_END_JST   = 8
 
 function isNightJST(): boolean {
+  if (NIGHT_START_JST <= 0) return false
   const jstHour = new Date(Date.now() + 9 * 3600 * 1000).getUTCHours()
   return jstHour >= NIGHT_START_JST && jstHour < NIGHT_END_JST
 }

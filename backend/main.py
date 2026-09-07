@@ -92,9 +92,14 @@ IDLE_SHUTDOWN_MINUTES = float(os.environ.get("IDLE_SHUTDOWN_MINUTES", "0"))
 # ので、休止モードでもインスタンス時間は消費しない。
 EXIT_ON_SHUTDOWN = os.environ.get("EXIT_ON_SHUTDOWN", "0") == "1"
 
-# JST夜間停止（例: 1〜8時）。0にすると無効
+# JST夜間停止（例: 1〜8時）。0にすると無効。
+# 既定は無効。Railway では停止＝課金停止だったが、Render の無課金プランは
+# 無通信15分で自動スリープするため、夜間に止めても何も節約できない。
+# 一方で「おやすみ中」画面の時間帯 (01:00-08:00 JST) は米国太平洋時間の
+# 09:00-16:00 にあたり、AdSense の審査担当者にゲームが動かない状態を
+# 見せることになるので、24時間動かしておく。
 _JST = datetime.timezone(datetime.timedelta(hours=9))
-NIGHT_START_JST = int(os.environ.get("NIGHT_START_JST", "1"))
+NIGHT_START_JST = int(os.environ.get("NIGHT_START_JST", "0"))
 NIGHT_END_JST   = int(os.environ.get("NIGHT_END_JST",   "8"))
 
 
