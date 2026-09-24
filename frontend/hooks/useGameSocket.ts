@@ -40,7 +40,12 @@ const BUILD_WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000/ws'
 const RECONNECT_DELAYS = [3000, 5000, 10000, 20000, 30000] // ms
 // 何回失敗したら「繋がらない」と認めて接続先を画面に出すか。
 // 再試行自体はこの後も続ける（サーバーが復帰したら自動で繋がる）。
-const ATTEMPTS_BEFORE_DIAGNOSIS = 4
+//
+// Render の無課金プランはインスタンスの復帰に50〜60秒かかることがある。
+// RECONNECT_DELAYS の累計が復帰時間を十分に超えてから「接続できません」と
+// 言わないと、正常な起動待ちを失敗と誤報する。
+// 累計: 3+5+10+20+30+30 = 98秒
+const ATTEMPTS_BEFORE_DIAGNOSIS = 6
 
 export type ConnPhase = 'connecting' | 'waking' | 'connected' | 'retrying' | 'unreachable' | 'misconfigured'
 
@@ -111,6 +116,8 @@ export function useGameSocket(playerName: string | null) {
   const retryCount   = useRef(0)
   const destroyed    = useRef(false)
   const lastRaceRef  = useRef(0)
+  // 一度でも接続できたか。起動待ちと切断後の再接続を言い分けるために使う。
+  const everConnected = useRef(false)
 
   const [game, setGame]                 = useState<GameState>(DEFAULT_GAME)
   const [user, setUser]                 = useState<UserState>(DEFAULT_USER)
@@ -141,10 +148,13 @@ export function useGameSocket(playerName: string | null) {
     async function connect(url: string) {
       if (destroyed.current) return
 
-      // 停止中のインスタンスを先に起こす。初回は素通し（起きているのが普通）、
-      // 一度失敗したあとは毎回起こしてから繋ぎにいく。
+      // 停止中のインスタンスを毎回先に起こしてから繋ぎにいく。
+      // Render は起動が終わるまでこのリクエストを保持するため、
+      //   ・起きていれば100ms程度で返り、ほぼ待たされない
+      //   ・停止していれば起動完了まで待たされ、その直後に WebSocket が通る
+      // WebSocket を先に投げると復帰前に弾かれ、再接続ループに入ってしまう。
       const health = healthUrlFor(url)
-      if (health && retryCount.current > 0) {
+      if (health) {
         setPhase('waking')
         await wakeBackend(health)
         if (destroyed.current) return
@@ -155,6 +165,7 @@ export function useGameSocket(playerName: string | null) {
 
       ws.onopen = () => {
         retryCount.current = 0
+        everConnected.current = true
         setConnected(true)
         setError(null)
         setPhase('connected')
@@ -289,7 +300,11 @@ export function useGameSocket(playerName: string | null) {
           setError(`サーバーに接続できません（接続先: ${url}）`)
         } else {
           setPhase('retrying')
-          setError(`再接続中... (${sec}秒後)`)
+          // 一度も繋がっていないなら「切断された」のではなく「まだ起きていない」。
+          // 停止中のインスタンスの起動待ちなので、そう書いたほうが正確。
+          setError(everConnected.current
+            ? `再接続中... (${sec}秒後)`
+            : `サーバーを起動しています… (${sec}秒後に再試行)`)
         }
         retryRef.current = setTimeout(() => connect(url), delay)
       }
