@@ -124,7 +124,7 @@ def _set_dormant(reason: str):
         return
     _dormant_reason = reason
     if engine:
-        engine.paused = True
+        engine.set_paused(True)
     logger.info("休止モードに入りました (%s)", reason)
 
 
@@ -135,13 +135,16 @@ def _wake():
     logger.info("休止モードを解除しました (%s から復帰)", _dormant_reason)
     _dormant_reason = None
     if engine:
-        engine.paused = False
+        engine.set_paused(False)
 
 
 def _on_user_connect():
     global _idle_since, _had_users
     _had_users = True
     _idle_since = None
+    # 誰もいない間レースは止まっている。最初の1人が来たらすぐ始める。
+    if engine:
+        engine.notify_user_joined()
 
 
 def _on_user_disconnect():
@@ -185,7 +188,8 @@ async def _idle_shutdown_watcher():
 @app.on_event("startup")
 async def startup():
     global engine
-    engine = GameEngine(manager.broadcast, manager.send)
+    # 接続者がいない間はレースを回さない。起動直後も誰もいないので待機から始まる。
+    engine = GameEngine(manager.broadcast, manager.send, has_users=lambda: manager.count > 0)
     if _is_night_jst():
         # 夜間に起動した場合は休止状態で待機する（従来はここでプロセスを終了していた）
         _set_dormant("night")
