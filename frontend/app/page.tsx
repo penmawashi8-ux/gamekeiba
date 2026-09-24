@@ -141,7 +141,7 @@ export default function Home() {
   const [brokeAcknowledged, setBrokeAcknowledged] = useState(false)
   const [isNight, setIsNight] = useState(false)
   // 夜間は接続しない（サーバーは休止中。無駄な再接続でインスタンスを起こさない）
-  const { game, user, connected, error, restoreError, payoutSettled, placeBet, requestRestore } =
+  const { game, user, connected, error, restoreError, payoutSettled, phase: connPhase, retry, placeBet, requestRestore } =
     useGameSocket(isNight ? null : playerName)
 
   useEffect(() => {
@@ -230,8 +230,23 @@ export default function Home() {
           </div>
         </div>
       </header>
-      {error && (
-        <div className="bg-red-50 border-b border-red-200 text-red-700 text-center py-2 text-sm px-4">{error}</div>
+      {connPhase === 'waking' && !connected && (
+        <div className="bg-amber-50 border-b border-amber-200 text-amber-800 text-center py-2 text-sm px-4">
+          サーバーを起動しています…（最大1分ほどかかります）
+        </div>
+      )}
+      {error && connPhase !== 'waking' && (
+        <div className="bg-red-50 border-b border-red-200 text-red-700 py-2 text-sm px-4
+          flex items-center justify-center gap-3 flex-wrap text-center">
+          <span className="break-all">{error}</span>
+          {(connPhase === 'unreachable' || connPhase === 'misconfigured') && (
+            <button onClick={retry}
+              className="shrink-0 px-3 py-1 rounded-lg bg-red-600 text-white text-xs font-bold
+                hover:bg-red-500 active:scale-95 transition-all">
+              再試行
+            </button>
+          )}
+        </div>
       )}
       {updateAvailable && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3
