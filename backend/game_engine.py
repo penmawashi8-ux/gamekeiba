@@ -66,6 +66,7 @@ class GameEngine:
         self,
         broadcast:      Callable[[dict], Awaitable[None]],
         send_personal:  Callable[[str, dict], Awaitable[None]],
+        has_users:      Optional[Callable[[], bool]] = None,
     ):
         self._broadcast     = broadcast
         self._send_personal = send_personal
@@ -75,18 +76,39 @@ class GameEngine:
         self.phase        = "waiting"
         # True の間はレースを進めない（夜間休止など）。プロセスは落とさない
         self.paused       = False
+        # 接続者がいるかを返す。誰もいない間はレースを回さないための判定に使う。
+        # 判定はレースの切れ目でのみ行うので、レース中に全員抜けても中断はしない。
+        self._has_users   = has_users or (lambda: True)
+        # 休止から復帰させるための合図。誰か接続したら set される。
+        self._resume      = asyncio.Event()
         self.horses: List[Horse] = []
         self.race_results: List[int] = []
         self.countdown    = 0
         self.race_number  = 0
         self._last_payouts: list = []
 
+    def set_paused(self, value: bool) -> None:
+        self.paused = value
+        if not value:
+            self._resume.set()
+
+    def notify_user_joined(self) -> None:
+        """接続者が現れたことを知らせて、待機中ならレースを始めさせる。"""
+        self._resume.set()
+
     async def run(self):
         while True:
             try:
-                if self.paused:
+                # 誰も見ていない間はレースを回さない。
+                # 判定はここ（レースの切れ目）だけなので、レース中に全員が
+                # 抜けても途中で止まらず、そのレースは最後まで進む。
+                if self.paused or not self._has_users():
                     self.phase = "waiting"
-                    await asyncio.sleep(10)
+                    self._resume.clear()
+                    # クリア後にもう一度見るのは、待ちに入る直前に接続された
+                    # 合図を取りこぼさないため
+                    if self.paused or not self._has_users():
+                        await self._resume.wait()
                     continue
                 await self._betting_phase()
                 await self._racing_phase()
