@@ -14,6 +14,9 @@ logger = logging.getLogger(__name__)
 BETTING_SECONDS  = 60
 RESULTS_SECONDS  = 12
 RACE_DT          = 0.05
+# 物理は RACE_DT ごとに進めるが、送信は N ティックに1回にする。
+# 2 なら 10Hz。クライアントは受信間隔を補間して描画する。
+RACE_BROADCAST_EVERY = 2
 
 BOT_NAMES = [
     "CPU_アラシ", "CPU_カゼマル", "CPU_ホシカゲ", "CPU_タイヨウ", "CPU_ミカヅキ",
@@ -21,6 +24,41 @@ BOT_NAMES = [
 ]
 BOT_BET_THRESHOLD = 300000
 BOT_COUNT = 400
+
+# 「全払い戻し情報」に載せる明細の上限。CPUが400体いるため的中明細が
+# 400件を超え、results メッセージだけで80KB前後になっていた。
+MAX_BROADCAST_PAYOUTS = 60
+
+
+def _trim_payouts(payouts: List["PayoutResult"]) -> List["PayoutResult"]:  # type: ignore[name-defined]
+    """ブロードキャストする払い戻し明細を間引く。
+
+    クライアントは payouts から (1) 自分の的中明細 (2) 複勝オッズ を取り出すので、
+    次の2つは必ず残す:
+      - 実プレイヤーの明細（1件でも欠けると「ハズレ」と誤表示される）
+      - 券種×馬番ごとに最低1件（複勝オッズの対応表が欠けないように）
+    残り枠は払戻額の大きいCPU明細で埋める。
+    """
+    humans   = [p for p in payouts if not p.user_id.startswith("bot_")]
+    bots     = [p for p in payouts if p.user_id.startswith("bot_")]
+
+    keep: List = list(humans)
+    seen = {(p.bet_type, p.horse) for p in humans}
+    rest: List = []
+    for p in sorted(bots, key=lambda p: -p.payout_amount):
+        key = (p.bet_type, p.horse)
+        if key not in seen:
+            seen.add(key)
+            keep.append(p)
+        else:
+            rest.append(p)
+
+    room = MAX_BROADCAST_PAYOUTS - len(keep)
+    if room > 0:
+        keep.extend(rest[:room])
+    # 元の並び順（賭けられた順）を保つ
+    order = {id(p): i for i, p in enumerate(payouts)}
+    return sorted(keep, key=lambda p: order[id(p)])
 
 
 class GameEngine:
@@ -70,8 +108,15 @@ class GameEngine:
 
         self.countdown = BETTING_SECONDS
         bot_placed = False
+        first = True
         while self.countdown > 0:
-            await self._broadcast(self._state_msg())
+            # 投票受付の60秒間、毎秒「馬8頭の全データ＋オッズ＋プール＋ランキング」を
+            # 再送すると1.7KB×60回になる。実際に変わるのは countdown だけで、
+            # オッズが動いたときは別途 odds_update を投げているため、
+            # 最初の1回だけ全体を送り、以降は差分（countdown）だけにする。
+            # 途中参加者には接続時に get_snapshot() で全体が渡る。
+            await self._broadcast(self._state_msg() if first else self._countdown_msg())
+            first = False
             await asyncio.sleep(1)
             self.countdown -= 1
             if not bot_placed and self.countdown == BETTING_SECONDS // 2:
@@ -82,7 +127,9 @@ class GameEngine:
         self.phase = "racing"
         self.race_results = []
 
+        tick = 0
         while len(self.race_results) < len(self.horses):
+            finished_now = False
             for h in self.horses:
                 if not h.finished:
                     h.update(RACE_DT)
@@ -90,7 +137,13 @@ class GameEngine:
                         h.finished = True
                         h.finish_rank = len(self.race_results) + 1
                         self.race_results.append(h.number)
-            await self._broadcast(self._race_update_msg())
+                        finished_now = True
+            tick += 1
+            # 物理は RACE_DT(=20Hz) のまま、送信だけ間引く。
+            # クライアント側で補間するため見た目は変わらない。
+            # 着順が確定したティックは、順位表示を遅らせないよう必ず送る。
+            if tick % RACE_BROADCAST_EVERY == 0 or finished_now:
+                await self._broadcast(self._race_update_msg())
             await asyncio.sleep(RACE_DT)
 
     async def _results_phase(self):
@@ -110,7 +163,7 @@ class GameEngine:
                     "payout_amount": p.payout_amount,
                     "odds":          p.odds,
                 }
-                for p in payouts
+                for p in _trim_payouts(payouts)
             ]
             totals: Dict[str, int] = {}
             for p in payouts:
@@ -152,19 +205,34 @@ class GameEngine:
             "leaderboard": self.users.get_ranking(5),
         }
 
+    def _countdown_msg(self) -> dict:
+        """投票受付中の毎秒更新。変化する値だけを持つ軽い game_state。
+
+        クライアントは未指定のフィールドを前回値のまま保持する。
+        """
+        return {
+            "type":        "game_state",
+            "phase":       self.phase,
+            "race_number": self.race_number,
+            "countdown":   self.countdown,
+        }
+
     def _race_update_msg(self) -> dict:
+        """レース中の位置更新。
+
+        レース中は毎秒何回も飛ぶうえ全接続へのブロードキャストなので、
+        ここのサイズがそのまま転送量になる。キー名を繰り返さない配列形式にし、
+        小数も表示に必要な桁で丸める。
+          p[i] = [進捗(0〜1, 小数4桁), 着順(未確定は0)]  ※並びは horses と同じ
+        anim_t はクライアントが自前で進めており使われていないため送らない。
+        """
         return {
             "type":  "race_update",
             "phase": "racing",
-            "positions": {
-                str(h.number): {
-                    "progress": min(1.0, h.x / TRACK_LENGTH),
-                    "finished": h.finished,
-                    "rank":     h.finish_rank,
-                    "anim_t":   h.anim_t,
-                }
+            "p": [
+                [round(min(1.0, h.x / TRACK_LENGTH), 4), h.finish_rank or 0]
                 for h in self.horses
-            },
+            ],
         }
 
     def _results_msg(self) -> dict:

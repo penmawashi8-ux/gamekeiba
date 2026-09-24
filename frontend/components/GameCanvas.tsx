@@ -19,6 +19,9 @@ export default function GameCanvas({ phase, horses, positions, raceRanking, coun
   const canvasRef  = useRef<HTMLCanvasElement>(null)
   const animRef    = useRef<number>(0)
   const localAnimT = useRef<Record<string, number>>({})
+  // 画面に描いている進捗。サーバーからの位置更新は10Hzなので、
+  // 受け取った値へ毎フレーム寄せていって60fpsの滑らかさを保つ。
+  const dispProg   = useRef<Record<string, number>>({})
 
   const stateRef = useRef({ phase, horses, positions, raceRanking, countdown })
   useEffect(() => {
@@ -102,8 +105,28 @@ export default function GameCanvas({ phase, horses, positions, raceRanking, coun
           ctx.fillText(`${h.running_style}  ${h.stars}`, PAD_LEFT + 6, y + 9)
         })
       } else if (phase === 'racing') {
+        // 受信値へ寄せた「表示用の進捗」を作る。
+        // SMOOTHING は 1秒あたりの寄せ具合。受信間隔(約100ms)より速く追従し、
+        // かつ1フレームで飛ばない値にしてある。
+        const SMOOTHING = 14
+        const k = 1 - Math.exp(-SMOOTHING * dt)
+        const shown: Record<string, number> = {}
+        horses.forEach(h => {
+          const key = String(h.number)
+          const target = positions[key]?.progress ?? 0
+          const prev = dispProg.current[key]
+          // 初回とゴール後はそのまま。レースが切り替わったとき前のレースの
+          // 位置から滑って見えるのを防ぐため、後退する場合も即座に合わせる。
+          const next = prev === undefined || target < prev || positions[key]?.finished
+            ? target
+            : prev + (target - prev) * k
+          dispProg.current[key] = next
+          shown[key] = next
+        })
+        const progOf = (num: number) => shown[String(num)] ?? 0
+
         // Camera follows the pack — zooms in to 60% of track width
-        const allProg = horses.map(h => positions[String(h.number)]?.progress ?? 0)
+        const allProg = horses.map(h => progOf(h.number))
         const leadProg = Math.max(...allProg, 0.02)
         const VIEW = 0.6
         const camStart = Math.max(0, Math.min(leadProg - VIEW * 0.75, 1 - VIEW))
@@ -151,7 +174,7 @@ export default function GameCanvas({ phase, horses, positions, raceRanking, coun
           if (p.finished && !bp.finished) return best
           if (!p.finished && bp.finished) return h.number
           if (p.rank && bp.rank) return p.rank < bp.rank ? h.number : best
-          return p.progress > bp.progress ? h.number : best
+          return progOf(h.number) > progOf(best) ? h.number : best
         }, horses[0]?.number ?? 0)
 
         // Clip drawing to track area
@@ -164,11 +187,12 @@ export default function GameCanvas({ phase, horses, positions, raceRanking, coun
           const pos = positions[String(h.number)]
           if (!pos) return
           const y = 10 + i * LANE_H + LANE_H / 2
-          const screenX = PAD_LEFT + (pos.progress - camStart) * camScale * trackW
+          const prog = progOf(h.number)
+          const screenX = PAD_LEFT + (prog - camStart) * camScale * trackW
           if (screenX < PAD_LEFT - 80 || screenX > W + 20) return
 
           if (!localAnimT.current[h.number]) localAnimT.current[h.number] = 0
-          if (!pos.finished) localAnimT.current[h.number] += dt * (3 + pos.progress * 2)
+          if (!pos.finished) localAnimT.current[h.number] += dt * (3 + prog * 2)
 
           // Leader lane glow
           if (h.number === leaderNum && !pos.finished) {
@@ -188,7 +212,7 @@ export default function GameCanvas({ phase, horses, positions, raceRanking, coun
               const phase = ((t * 2.5 + si * 0.55) % 1)
               const ly = y - 9 + si * 4.5
               const len = 18 + si * 7
-              ctx.globalAlpha = (1 - phase) * 0.35 * Math.min(1, pos.progress * 4)
+              ctx.globalAlpha = (1 - phase) * 0.35 * Math.min(1, prog * 4)
               ctx.strokeStyle = '#fff'
               ctx.beginPath()
               ctx.moveTo(horseX - len - phase * 35, ly)

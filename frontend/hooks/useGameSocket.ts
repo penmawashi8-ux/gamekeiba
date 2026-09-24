@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useCallback, useState } from 'react'
-import type { GameState, UserState, Phase, Pools } from '@/types/game'
+import type { GameState, UserState, Phase, Pools, HorsePosition } from '@/types/game'
 
 const DEFAULT_GAME: GameState = {
   phase: 'waiting',
@@ -190,14 +190,16 @@ export function useGameSocket(playerName: string | null) {
             break
 
           case 'game_state':
+            // 投票受付中の毎秒更新は countdown しか持たない軽い形で飛んでくる。
+            // 指定されなかったフィールドは前回値を保持すること（空で上書きしない）。
             setGame(g => ({
               ...g,
               phase: msg.phase as Phase,
               raceNumber: msg.race_number ?? g.raceNumber,
               countdown: msg.countdown ?? 0,
               horses: msg.horses ?? g.horses,
-              winOdds: parseOdds(msg.win_odds),
-              showOdds: parseShowOdds(msg.show_odds),
+              winOdds: msg.win_odds ? parseOdds(msg.win_odds) : g.winOdds,
+              showOdds: msg.show_odds ? parseShowOdds(msg.show_odds) : g.showOdds,
               pools: msg.pools ?? g.pools,
               leaderboard: msg.leaderboard ?? g.leaderboard,
               positions: {},
@@ -215,7 +217,7 @@ export function useGameSocket(playerName: string | null) {
             setGame(g => ({
               ...g,
               phase: 'racing',
-              positions: msg.positions ?? g.positions,
+              positions: parsePositions(msg, g),
             }))
             break
 
@@ -363,6 +365,32 @@ export function useGameSocket(playerName: string | null) {
     phase, wsUrl, attempts, retry,
     placeBet, refreshBets, requestRestore,
   }
+}
+
+/**
+ * race_update の位置情報を取り出す。
+ *
+ * 現行は帯域節約のため配列形式:
+ *   p[i] = [進捗, 着順(0は未確定)]   ※並びは horses と同じ
+ * 旧形式（馬番をキーにしたオブジェクト）も受け取れるようにしてある。
+ * フロントとバックエンドは別々にデプロイされるため、切り替わりの前後で
+ * どちらの形が届いてもレースが止まらないようにするのが目的。
+ */
+function parsePositions(
+  msg: { p?: [number, number][]; positions?: Record<string, HorsePosition> },
+  game: GameState,
+): Record<string, HorsePosition> {
+  if (Array.isArray(msg.p)) {
+    const out: Record<string, HorsePosition> = {}
+    msg.p.forEach(([progress, rank], i) => {
+      const num = game.horses[i]?.number
+      if (num === undefined) return
+      out[String(num)] = { progress, finished: rank > 0, rank: rank > 0 ? rank : null }
+    })
+    // 馬情報がまだ届いていない等で1頭も解決できないときは前回値を残す
+    return Object.keys(out).length > 0 ? out : game.positions
+  }
+  return msg.positions ?? game.positions
 }
 
 function parseOdds(raw: Record<string, number> | undefined): Record<string, number> {

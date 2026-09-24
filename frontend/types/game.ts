@@ -13,7 +13,8 @@ export interface HorsePosition {
   progress: number   // 0.0 ~ 1.0
   finished: boolean
   rank: number | null
-  anim_t: number
+  // anim_t はサーバーから送っていた時期があるが、脚の動きは GameCanvas が
+  // 自前のタイマーで進めており使っていなかったため廃止した。
 }
 
 export interface Bet {
