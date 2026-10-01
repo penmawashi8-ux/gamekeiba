@@ -9,3 +9,6 @@ services:
     envVars:
       - key: ALLOWED_ORIGINS
         sync: false
+      # 所持金の保存先（Neon などの Postgres）。未設定だと再起動のたびに所持金が消える
+      - key: DATABASE_URL
+        sync: false

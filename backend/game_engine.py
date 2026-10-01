@@ -189,6 +189,9 @@ class GameEngine:
             ]
             totals: Dict[str, int] = {}
             for p in payouts:
+                # CPU は users テーブルにいない。外部DBへの無駄な往復（1レース数百回）を避ける
+                if p.user_id.startswith("bot_"):
+                    continue
                 self.users.update_balance(p.user_id, p.payout_amount)
                 totals[p.user_id] = totals.get(p.user_id, 0) + p.payout_amount
 
