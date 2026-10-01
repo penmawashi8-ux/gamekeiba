@@ -51,6 +51,8 @@ export interface GameState {
   showOdds: Record<string, [number, number]>
   pools: Pools
   payouts: PayoutInfo[]
+  // 複勝の確定オッズ {馬番: 倍率}。payouts には CPU が載らないので別に受け取る
+  showPayoutOdds: Record<string, number>
   leaderboard: [string, number][]
   online: number
 }

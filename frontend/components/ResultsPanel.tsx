@@ -8,6 +8,7 @@ interface Props {
   winOdds: Record<string, number>
   showOdds: Record<string, [number, number]>
   payouts: PayoutInfo[]
+  showPayoutOdds: Record<string, number>
   myUserId: string
   countdown: number
   hasBet: boolean
@@ -21,14 +22,18 @@ const PLACE_STYLES = [
 ]
 
 export default function ResultsPanel({
-  ranking, horses, winOdds, showOdds, payouts, myUserId, countdown, hasBet
+  ranking, horses, winOdds, showOdds, payouts, showPayoutOdds, myUserId, countdown, hasBet
 }: Props) {
   const horseMap = Object.fromEntries(horses.map(h => [h.number, h]))
   const myPayouts = payouts.filter(p => p.user_id === myUserId)
   const myTotal   = myPayouts.reduce((s, p) => s + p.payout_amount, 0)
-  const showActualOdds = Object.fromEntries(
-    payouts.filter(p => p.bet_type === 'show').map(p => [String(p.horse), p.odds])
-  )
+  // 旧バックエンドは show_payout_odds を送らず、payouts に CPU を混ぜていたのでそこから拾う
+  const showActualOdds: Record<string, number> = {
+    ...Object.fromEntries(
+      payouts.filter(p => p.bet_type === 'show').map(p => [String(p.horse), p.odds])
+    ),
+    ...showPayoutOdds,
+  }
   const popularityMap: Record<string, number> = Object.fromEntries(
     Object.entries(winOdds)
       .sort(([, a], [, b]) => a - b)
@@ -102,7 +107,7 @@ export default function ResultsPanel({
             ))}
           </div>
         </div>
-      ) : myPayouts.length === 0 && payouts.length > 0 && hasBet ? (
+      ) : hasBet ? (
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center text-red-600 text-sm">
           ハズレ...
         </div>
