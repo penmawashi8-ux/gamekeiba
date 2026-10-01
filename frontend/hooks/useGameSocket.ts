@@ -16,6 +16,7 @@ const DEFAULT_GAME: GameState = {
   payouts: [],
   showPayoutOdds: {},
   leaderboard: [],
+  onlineLeaderboard: [],
   online: 0,
 }
 
@@ -203,6 +204,7 @@ export function useGameSocket(playerName: string | null) {
               showOdds: msg.show_odds ? parseShowOdds(msg.show_odds) : g.showOdds,
               pools: msg.pools ?? g.pools,
               leaderboard: msg.leaderboard ?? g.leaderboard,
+              onlineLeaderboard: msg.online_leaderboard ?? g.onlineLeaderboard,
               positions: {},
               raceRanking: [],
             }))
@@ -234,6 +236,7 @@ export function useGameSocket(playerName: string | null) {
               payouts: msg.payouts ?? [],
               showPayoutOdds: msg.show_payout_odds ?? {},
               leaderboard: msg.leaderboard ?? g.leaderboard,
+              onlineLeaderboard: msg.online_leaderboard ?? g.onlineLeaderboard,
             }))
             break
 
@@ -251,7 +254,11 @@ export function useGameSocket(playerName: string | null) {
             break
 
           case 'online_update':
-            setGame(g => ({ ...g, online: msg.online }))
+            setGame(g => ({
+              ...g,
+              online: msg.online,
+              onlineLeaderboard: msg.online_leaderboard ?? g.onlineLeaderboard,
+            }))
             break
 
           case 'bet_result':

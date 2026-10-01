@@ -46,6 +46,7 @@ class GameEngine:
         broadcast:      Callable[[dict], Awaitable[None]],
         send_personal:  Callable[[str, dict], Awaitable[None]],
         has_users:      Optional[Callable[[], bool]] = None,
+        online_user_ids: Optional[Callable[[], List[str]]] = None,
     ):
         self._broadcast     = broadcast
         self._send_personal = send_personal
@@ -58,6 +59,8 @@ class GameEngine:
         # 接続者がいるかを返す。誰もいない間はレースを回さないための判定に使う。
         # 判定はレースの切れ目でのみ行うので、レース中に全員抜けても中断はしない。
         self._has_users   = has_users or (lambda: True)
+        # 接続中のユーザーID一覧。オンラインランキングに使う
+        self._online_user_ids = online_user_ids or (lambda: [])
         # 休止から復帰させるための合図。誰か接続したら set される。
         self._resume      = asyncio.Event()
         self.horses: List[Horse] = []
@@ -199,6 +202,10 @@ class GameEngine:
             await asyncio.sleep(1)
             self.countdown -= 1
 
+    def online_ranking(self) -> list:
+        """今接続している人だけの残高ランキング"""
+        return self.users.get_ranking(5, self._online_user_ids())
+
     def _state_msg(self) -> dict:
         return {
             "type":        "game_state",
@@ -210,6 +217,7 @@ class GameEngine:
             "show_odds":   {str(k): list(v) for k, v in self.betting.get_show_odds_range().items()},
             "pools":       self.betting.get_pools(),
             "leaderboard": self.users.get_ranking(5),
+            "online_leaderboard": self.online_ranking(),
         }
 
     def _countdown_msg(self) -> dict:
@@ -254,6 +262,7 @@ class GameEngine:
             "payouts":     self._last_payouts,
             "show_payout_odds": self._last_show_payout_odds,
             "leaderboard": self.users.get_ranking(5),
+            "online_leaderboard": self.online_ranking(),
         }
 
     def get_snapshot(self) -> dict:

@@ -73,6 +73,10 @@ class ConnManager:
         self._conns.pop(user_id, None)
 
     @property
+    def user_ids(self) -> list:
+        return list(self._conns)
+
+    @property
     def count(self) -> int:
         return len(self._conns)
 
@@ -189,7 +193,8 @@ async def _idle_shutdown_watcher():
 async def startup():
     global engine
     # 接続者がいない間はレースを回さない。起動直後も誰もいないので待機から始まる。
-    engine = GameEngine(manager.broadcast, manager.send, has_users=lambda: manager.count > 0)
+    engine = GameEngine(manager.broadcast, manager.send, has_users=lambda: manager.count > 0,
+                        online_user_ids=lambda: manager.user_ids)
     if _is_night_jst():
         # 夜間に起動した場合は休止状態で待機する（従来はここでプロセスを終了していた）
         _set_dormant("night")
@@ -247,7 +252,7 @@ async def ws_endpoint(websocket: WebSocket):
         }, ensure_ascii=False))
 
         await websocket.send_text(json.dumps(engine.get_snapshot(), ensure_ascii=False))
-        await manager.broadcast({"type": "online_update", "online": manager.count})
+        await _broadcast_online()
 
         while True:
             raw = await websocket.receive_text()
@@ -263,7 +268,16 @@ async def ws_endpoint(websocket: WebSocket):
         if user_id:
             manager.remove(user_id)
             _on_user_disconnect()
-            await manager.broadcast({"type": "online_update", "online": manager.count})
+            await _broadcast_online()
+
+
+async def _broadcast_online():
+    """接続人数とオンラインランキングを全員に送る（入退室のたびに顔ぶれが変わるため）"""
+    await manager.broadcast({
+        "type":               "online_update",
+        "online":             manager.count,
+        "online_leaderboard": engine.online_ranking(),
+    })
 
 
 async def _handle_msg(ws: WebSocket, user_id: str, display_name: str, msg: dict):
