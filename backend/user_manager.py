@@ -188,9 +188,19 @@ class UserManager:
             return INITIAL_BALANCE
         return self._run(fn)
 
-    def get_ranking(self, limit: int = 5) -> List[Tuple[str, int]]:
+    def get_ranking(
+        self, limit: int = 5, user_ids: Optional[List[str]] = None
+    ) -> List[Tuple[str, int]]:
+        """残高ランキング。user_ids を渡すとその中だけで順位をつける（オンライン中の人など）"""
+        if user_ids is None:
+            where, params = "", ()
+        elif not user_ids:
+            return []
+        else:
+            where = "WHERE user_id IN (" + ", ".join("?" * len(user_ids)) + ") "
+            params = tuple(user_ids)
         return self._run(lambda conn: [tuple(r) for r in self._exec(
             conn,
-            "SELECT display_name, balance FROM users ORDER BY balance DESC LIMIT ?",
-            (limit,)
+            "SELECT display_name, balance FROM users " + where + "ORDER BY balance DESC LIMIT ?",
+            params + (limit,)
         ).fetchall()])

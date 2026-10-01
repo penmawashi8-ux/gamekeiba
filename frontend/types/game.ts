@@ -54,6 +54,8 @@ export interface GameState {
   // 複勝の確定オッズ {馬番: 倍率}。payouts には CPU が載らないので別に受け取る
   showPayoutOdds: Record<string, number>
   leaderboard: [string, number][]
+  // 今接続している人だけの残高ランキング
+  onlineLeaderboard: [string, number][]
   online: number
 }
 

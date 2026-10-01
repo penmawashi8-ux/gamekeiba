@@ -290,8 +290,9 @@ export default function Home() {
             showOdds={game.showOdds} payouts={game.payouts} showPayoutOdds={game.showPayoutOdds} myUserId={user.userId} countdown={game.countdown}
             hasBet={user.myBets.length > 0} />
         )}
-        {game.leaderboard.length > 0 && (
-          <Leaderboard leaderboard={game.leaderboard} myName={user.displayName} />
+        {(game.leaderboard.length > 0 || game.onlineLeaderboard.length > 0) && (
+          <Leaderboard leaderboard={game.leaderboard} onlineLeaderboard={game.onlineLeaderboard}
+            myName={user.displayName} />
         )}
       </main>
     </div>
