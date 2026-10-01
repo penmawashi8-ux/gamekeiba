@@ -49,7 +49,9 @@ TRACK_LENGTH: float = 6000.0
 BASE_SPEED_MIN: float = 185.0
 BASE_SPEED_MAX: float = 210.0
 STRENGTH_MULT: dict = {1: 0.88, 2: 0.94, 3: 1.00, 4: 1.06, 5: 1.12}
-CONDITION_SIGMA: float = 0.10  # レースごとの調子ばらつき（±10%程度）
+# レースごとの調子ばらつき（±8.5%程度）。0.10 だと★1つ分(6%)より運の影響が
+# 大きすぎ、★5でも勝率36%と当てにならなかったので少しだけ絞った（→約39%）
+CONDITION_SIGMA: float = 0.085
 
 
 class Horse:
