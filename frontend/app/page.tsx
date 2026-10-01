@@ -287,7 +287,7 @@ export default function Home() {
         )}
         {isResults && (
           <ResultsPanel ranking={game.raceRanking} horses={game.horses} winOdds={game.winOdds}
-            showOdds={game.showOdds} payouts={game.payouts} myUserId={user.userId} countdown={game.countdown}
+            showOdds={game.showOdds} payouts={game.payouts} showPayoutOdds={game.showPayoutOdds} myUserId={user.userId} countdown={game.countdown}
             hasBet={user.myBets.length > 0} />
         )}
         {game.leaderboard.length > 0 && (

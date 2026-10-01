@@ -25,40 +25,19 @@ BOT_NAMES = [
 BOT_BET_THRESHOLD = 300000
 BOT_COUNT = 400
 
-# 「全払い戻し情報」に載せる明細の上限。CPUが400体いるため的中明細が
-# 400件を超え、results メッセージだけで80KB前後になっていた。
-MAX_BROADCAST_PAYOUTS = 60
 
+def _human_payouts(payouts: List["PayoutResult"]) -> List["PayoutResult"]:  # type: ignore[name-defined]
+    """「全払い戻し情報」に載せる明細。CPU は載せず、実プレイヤーの的中だけにする。
 
-def _trim_payouts(payouts: List["PayoutResult"]) -> List["PayoutResult"]:  # type: ignore[name-defined]
-    """ブロードキャストする払い戻し明細を間引く。
-
-    クライアントは payouts から (1) 自分の的中明細 (2) 複勝オッズ を取り出すので、
-    次の2つは必ず残す:
-      - 実プレイヤーの明細（1件でも欠けると「ハズレ」と誤表示される）
-      - 券種×馬番ごとに最低1件（複勝オッズの対応表が欠けないように）
-    残り枠は払戻額の大きいCPU明細で埋める。
+    以前は複勝の確定オッズをこの明細から拾っていたため CPU の明細も混ぜていたが、
+    確定オッズは results の show_payout_odds で別に送るようにした。
     """
-    humans   = [p for p in payouts if not p.user_id.startswith("bot_")]
-    bots     = [p for p in payouts if p.user_id.startswith("bot_")]
+    return [p for p in payouts if not p.user_id.startswith("bot_")]
 
-    keep: List = list(humans)
-    seen = {(p.bet_type, p.horse) for p in humans}
-    rest: List = []
-    for p in sorted(bots, key=lambda p: -p.payout_amount):
-        key = (p.bet_type, p.horse)
-        if key not in seen:
-            seen.add(key)
-            keep.append(p)
-        else:
-            rest.append(p)
 
-    room = MAX_BROADCAST_PAYOUTS - len(keep)
-    if room > 0:
-        keep.extend(rest[:room])
-    # 元の並び順（賭けられた順）を保つ
-    order = {id(p): i for i, p in enumerate(payouts)}
-    return sorted(keep, key=lambda p: order[id(p)])
+def _show_payout_odds(payouts: List["PayoutResult"]) -> Dict[str, float]:  # type: ignore[name-defined]
+    """複勝の確定オッズ {馬番: 倍率}。CPU の明細も含めて拾うので、的中者がいない馬は出ない。"""
+    return {str(p.horse): p.odds for p in payouts if p.bet_type == "show"}
 
 
 class GameEngine:
@@ -86,6 +65,7 @@ class GameEngine:
         self.countdown    = 0
         self.race_number  = 0
         self._last_payouts: list = []
+        self._last_show_payout_odds: Dict[str, float] = {}
 
     def set_paused(self, value: bool) -> None:
         self.paused = value
@@ -125,6 +105,7 @@ class GameEngine:
         self.horses = generate_race_horses(8)
         self.betting.reset()
         self._last_payouts = []
+        self._last_show_payout_odds = {}
         for h in self.horses:
             h.setup_race()
 
@@ -185,8 +166,9 @@ class GameEngine:
                     "payout_amount": p.payout_amount,
                     "odds":          p.odds,
                 }
-                for p in _trim_payouts(payouts)
+                for p in _human_payouts(payouts)
             ]
+            self._last_show_payout_odds = _show_payout_odds(payouts)
             totals: Dict[str, int] = {}
             for p in payouts:
                 # CPU は users テーブルにいない。外部DBへの無駄な往復（1レース数百回）を避ける
@@ -270,6 +252,7 @@ class GameEngine:
             "win_odds":    {str(k): v for k, v in self.betting.get_win_odds().items()},
             "show_odds":   {str(k): list(v) for k, v in self.betting.get_show_odds_range().items()},
             "payouts":     self._last_payouts,
+            "show_payout_odds": self._last_show_payout_odds,
             "leaderboard": self.users.get_ranking(5),
         }
 

@@ -14,6 +14,7 @@ const DEFAULT_GAME: GameState = {
   showOdds: {},
   pools: { win: {}, show: {}, win_total: 0, show_total: 0 },
   payouts: [],
+  showPayoutOdds: {},
   leaderboard: [],
   online: 0,
 }
@@ -231,6 +232,7 @@ export function useGameSocket(playerName: string | null) {
               winOdds: parseOdds(msg.win_odds),
               showOdds: parseShowOdds(msg.show_odds),
               payouts: msg.payouts ?? [],
+              showPayoutOdds: msg.show_payout_odds ?? {},
               leaderboard: msg.leaderboard ?? g.leaderboard,
             }))
             break
