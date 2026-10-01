@@ -58,6 +58,7 @@ WS_URL=ws://127.0.0.1:8000/ws npm run dev
 | 変数 | 既定 | 説明 |
 |---|---|---|
 | `ALLOWED_ORIGINS` | `*` | CORS 許可オリジン（カンマ区切り） |
+| `DATABASE_URL` | なし | 所持金の保存先 Postgres。未設定だと `users.db` (SQLite) になり、Render では再デプロイや自動スリープ復帰のたびに消える |
 | `NIGHT_START_JST` | `0` | 夜間休止の開始時刻。`0` で無効 |
 | `NIGHT_END_JST` | `8` | 夜間休止の終了時刻 |
 | `IDLE_SHUTDOWN_MINUTES` | `0` | 無人が続いたら休止。`0` で無効 |
