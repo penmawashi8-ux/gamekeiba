@@ -20,15 +20,23 @@ python3 backtest.py /path/to/keiba_ai_ver3.0  # results/ に CSV を出力
 
 `results/累計収支_日別.csv` は日ごとの累計収支で、動画の「残高推移グラフ」にそのまま使える。
 
-### 残高推移のアニメーション動画
+### アニメーション動画（BGM付き）
 
 ```bash
-pip install pandas matplotlib            # ffmpeg と Noto Sans CJK JP（fonts-noto-cjk）も必要
-python3 make_video.py jockey ninki       # → videos/jockey.mp4, videos/ninki.mp4
+pip install pandas matplotlib               # ffmpeg と Noto Sans CJK JP（fonts-noto-cjk）も必要
+python3 make_video.py jockey ninki ranking  # → videos/*.mp4
 ```
 
-横 1920x1080・30fps・37秒（タイトル2秒 → 1年分の推移30秒 → 結果5秒）。
-比べる系列は `make_video.py` の `PRESETS` に足せば増やせる。
+| 動画 | 内容 |
+|---|---|
+| `jockey.mp4` | 勝利数トップ3（ルメール・戸崎圭太・松山弘平）vs 回収率1位（原優介）の単勝。重賞勝ちを馬名つきで速報、G1勝ちは線に★、30倍以上の的中はカード表示 |
+| `ninki.mp4` | 1番人気・2番人気・最低人気の単勝と、1→2→3番人気の三連単。100倍以上の的中をカード表示 |
+| `ranking.mp4` | 300騎乗以上の騎手66人の累計収支 TOP10 が入れ替わっていくバーチャートレース。100倍以上の的中と G1 勝ちを右に速報 |
+
+- 横 1920x1080・30fps・47秒（タイトル2秒 → 1年分の推移40秒 → 結果5秒）
+- BGM と効果音は `bgm.py` がその場で合成するオリジナル（素材ファイル不要・権利フリー）。高配当で「チャリーン」、G1でファンファーレ、重賞で「キラッ」
+- 重賞の判定は `grades.py` のレース名リスト（元データにグレードが無いため）。勝利数はこのデータ（払戻が揃っている3,355レース）で数えたもので、公式記録とは数勝ずれることがある
+- 比べる系列は `make_video.py` の `PRESETS` に足せば増やせる
 
 ## 結果まとめ
 

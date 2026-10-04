@@ -12,6 +12,8 @@ from itertools import combinations
 
 import pandas as pd
 
+from grades import grade
+
 YEAR = "2025"
 STAKE = 100
 
@@ -47,7 +49,14 @@ def load(root):
     pay = {}
     for (rid, kind), g in ret.groupby(["rid", "式別"]):
         pay[(rid, kind)] = dict(zip(g["馬番"], g["配当"]))
-    return runners, pay
+
+    # レース名（動画で重賞勝ちを出すのに使う。無くても検証自体はできる）
+    names = {}
+    sched = glob.glob(f"{root}/data/race_schedule/race_time_id_list/{YEAR}*.csv")
+    if sched:
+        sc = pd.concat(pd.read_csv(f, dtype=str) for f in sched).drop_duplicates("race_id")
+        names = dict(zip(sc["race_id"], sc["race_name"]))
+    return runners, pay, names
 
 
 def key(kind, nums):
@@ -94,7 +103,7 @@ def balance_curve(bets):
 
 def main(root, out):
     os.makedirs(out, exist_ok=True)
-    runners, pay = load(root)
+    runners, pay, race_names = load(root)
     races = runners.groupby("rid")
     meta = runners.groupby("rid")["date"].first()
     print(f"対象: {YEAR}年 {runners['rid'].nunique()}レース / のべ{len(runners)}頭")
@@ -103,10 +112,22 @@ def main(root, out):
         return pd.DataFrame({
             "date": df["date"].values, "rid": df["rid"].values,
             "ret": [payout(pay, r, kind, [n]) for r, n in zip(df["rid"], df["馬番"])],
+            "horse": df["馬名"].values, "odds": df["単勝"].values,
         })
 
     curves = {}
     out_tables = {}
+    events = []
+
+    def track(name, bets):
+        """累計収支の曲線と、動画で見せる的中（30倍以上 or 重賞）を記録する"""
+        curves[name] = balance_curve(bets)
+        for _, b in bets[bets["ret"] > 0].iterrows():
+            race = race_names.get(b["rid"], "")
+            g = grade(race)
+            if b["ret"] >= 3000 or g:
+                events.append({"系列": name, "date": b["date"].date(), "rid": b["rid"], "レース名": race,
+                               "格": g, "馬名": b.get("horse", ""), "払戻": int(b["ret"])})
 
     # 1. 人気別（元ネタの再現）
     rows = []
@@ -116,7 +137,7 @@ def main(root, out):
             b = single(sel, kind)
             s = summarize(f"{p}番人気の{kind}", b)
             if s and p <= 3:
-                curves[f"{p}番人気 {kind}"] = balance_curve(b)
+                track(f"{p}番人気 {kind}", b)
             if s:
                 s.update(人気=p, 券種=kind)
                 rows.append(s)
@@ -125,10 +146,10 @@ def main(root, out):
     # 2. 両極端と「全部買い」
     rows = []
     fav = single(runners[runners["人気"] == 1])
-    rows.append(summarize("毎レース1番人気の単勝", fav)); curves["1番人気 単勝"] = balance_curve(fav)
+    rows.append(summarize("毎レース1番人気の単勝", fav)); track("1番人気 単勝", fav)
     last = runners[runners["人気"] == runners.groupby("rid")["人気"].transform("max")]
     lb = single(last)
-    rows.append(summarize("毎レース最低人気の単勝", lb)); curves["最低人気 単勝"] = balance_curve(lb)
+    rows.append(summarize("毎レース最低人気の単勝", lb)); track("最低人気 単勝", lb)
     allb = single(runners)
     rows.append(summarize("毎レース全頭の単勝（全通り買い）", allb))
     rows.append(summarize("毎レース全頭の複勝（全通り買い）", single(runners, "複勝")))
@@ -145,7 +166,7 @@ def main(root, out):
                           "ret": [payout(pay, r, kind, nums(t)) for r, t in top.items()]})
         rows.append(summarize(label, b))
         if kind == "三連単":
-            curves["1→2→3番人気 三連単"] = balance_curve(b)
+            track("1→2→3番人気 三連単", b)
     # 1-2-3番人気の三連単ボックス（6点）
     from itertools import permutations
     bx = []
@@ -164,8 +185,9 @@ def main(root, out):
         s = summarize(f"{j}騎手の単勝を全部", b)
         s["騎手"] = j
         s["平均人気"] = round(g["人気"].mean(), 1)
+        s["勝利数"] = int((b["ret"] > 0).sum())
         rows.append(s)
-        curves[f"騎手:{j}"] = balance_curve(b)
+        track(f"騎手:{j}", b)
     out_tables["04_騎手別"] = pd.DataFrame(rows).sort_values("回収率%", ascending=False)
 
     # 5. 馬番別：「毎レース◯番の単勝」
@@ -214,6 +236,7 @@ def main(root, out):
 
     for name, t in out_tables.items():
         t.to_csv(f"{out}/{name}.csv", index=False)
+    pd.DataFrame(events).to_csv(f"{out}/的中イベント.csv", index=False)
     pd.DataFrame(curves).ffill().fillna(0).astype(int).to_csv(f"{out}/累計収支_日別.csv")
     return out_tables, curves
 
