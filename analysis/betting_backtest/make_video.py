@@ -30,9 +30,9 @@ W, H, FPS = 1920, 1080, 30
 AX_RECT = [0.06, 0.08, 0.47, 0.62]  # 折れ線の位置（左, 下, 幅, 高さ）
 PX = 0.73                           # 右パネルの左端
 DOT = 0.012
-INTRO_S, RUN_S, OUTRO_S = 2.0, 40.0, 5.0
-CARD_S = 2.2   # 高配当カードを出す秒数
-FEED_S = 1.3   # 重賞速報1件あたりの秒数
+INTRO_S, RUN_S, OUTRO_S = 2.5, 50.0, 6.5
+CARD_S = 2.6   # 高配当カードを出す秒数
+FEED_S = 1.6   # 重賞速報1件あたりの秒数
 
 # 暗い背景用のカテゴリ色（順番固定。系列の色は順位ではなく系列に付く）
 SURFACE = "#1a1a19"
@@ -412,7 +412,7 @@ def render_race(out_path, stills=None):
         order = sorted(range(n), key=lambda i: (-round(val[i]), names[i]))
         rank = np.empty(n)
         rank[order] = np.arange(n)
-        pos_y += (rank - pos_y) * 0.3
+        pos_y += (rank - pos_y) * 0.25
         top = order[:RACE_TOP]
         lo, hi = min(0, val[top].min()), max(0, val[top].max())
         xlo += (lo * 1.3 - 2000 - xlo) * 0.15
@@ -446,7 +446,7 @@ def render_race(out_path, stills=None):
         ax.grid(axis="x", color=GRID, linewidth=1.5)
         ax.axvline(0, color=TEXT2, linewidth=2.5, zorder=1)
 
-        recent = {r.i for r in ev.itertuples() if r.f0 <= f < r.f0 + 1.5 * FPS}
+        recent = {r.i for r in ev.itertuples() if r.f0 <= f < r.f0 + 1.8 * FPS}
         span = xhi - xlo
         for i in range(n):
             y = pos_y[i]
