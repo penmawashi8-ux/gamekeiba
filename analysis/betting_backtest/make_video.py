@@ -2,11 +2,13 @@
 
     python3 make_video.py jockey   # → videos/jockey.mp4
     python3 make_video.py ninki
-    python3 make_video.py ranking  # 騎手の収支 TOP10 が入れ替わっていくバーチャートレース
+    python3 make_video.py ranking2019  # 騎手の収支 TOP10 が入れ替わっていくバーチャートレース（年を指定）
 
-backtest.py が出力した results/ の CSV を使う。ffmpeg と Noto Sans CJK JP が必要。
+jockey / ninki は backtest.py が出力した results/ の CSV、
+ranking は ranking_data.py が出力した results/ranking/<年>/ を使う。ffmpeg と Noto Sans CJK JP が必要。
 高配当（preset の big 以上の払戻）はカードで、重賞勝ちは上部の速報欄で馬名と一緒に出す。
 """
+import json
 import os
 import subprocess
 import sys
@@ -364,12 +366,15 @@ RACE_TOP = 10
 RACE_BIG = 10000  # 100倍以上の的中と G1 勝ちを右の速報に出す
 
 
-def render_race(out_path, stills=None):
-    curves = pd.read_csv(os.path.join(RES, "累計収支_日別.csv"), index_col=0, parse_dates=True)
-    cols = [c for c in curves.columns if c.startswith("騎手:")]
-    names = [c[3:] for c in cols]
-    table = pd.read_csv(os.path.join(RES, "04_騎手別.csv")).set_index("騎手")
-    dates = np.concatenate([[pd.Timestamp("2025-01-01")], curves.index])
+def render_race(out_path, stills=None, year=2025):
+    """ranking_data.py が作った results/ranking/<年>/ を使う"""
+    src = os.path.join(RES, "ranking", str(year))
+    meta = json.load(open(os.path.join(src, "meta.json")))
+    curves = pd.read_csv(os.path.join(src, "curves.csv"), index_col=0, parse_dates=True)
+    cols = list(curves.columns)
+    names = cols
+    table = pd.read_csv(os.path.join(src, "jockeys.csv")).set_index("name")
+    dates = np.concatenate([[pd.Timestamp(f"{year}-01-01")], curves.index])
     data = np.vstack([np.zeros(len(cols)), curves[cols].to_numpy(dtype=float)])
     n_days, n = len(dates), len(cols)
     xs = np.array([(d - dates[0]).days for d in dates], dtype=float)
@@ -379,9 +384,9 @@ def render_race(out_path, stills=None):
     intro_frames = int(INTRO_S * FPS)
     day_frame = lambda k: intro_frames + int(round(run_frames * k / (n_days - 1)))
 
-    ev = pd.read_csv(os.path.join(RES, "的中イベント.csv"), parse_dates=["date"]).fillna("")
-    ev = ev[ev["系列"].isin(cols) & ((ev["払戻"] >= RACE_BIG) | (ev["格"] == "G1"))].copy()
-    ev["i"] = ev["系列"].map({c: i for i, c in enumerate(cols)})
+    ev = pd.read_csv(os.path.join(src, "events.csv"), parse_dates=["date"]).fillna("")
+    ev = ev[ev["騎手"].isin(cols) & ((ev["払戻"] >= RACE_BIG) | (ev["格"] == "G1"))].copy()
+    ev["i"] = ev["騎手"].map({c: i for i, c in enumerate(cols)})
     ev["day"] = ev["date"].map({d: k for k, d in enumerate(dates)})
     ev = ev.sort_values(["date", "払戻"])
     ev["f0"] = [day_frame(d) for d in ev["day"]]
@@ -423,12 +428,16 @@ def render_race(out_path, stills=None):
         fig.clf()
         fig.set_facecolor(SURFACE)
         ax = fig.add_axes(bx, facecolor=SURFACE)
-        fig.text(0.04, 0.955, "騎手の単勝を 1年間 全部買ったら？ 収支TOP10", ha="left", va="top",
+        fig.text(0.04, 0.955, "騎手の単勝を " + ("" if meta["partial"] else "1年間 ") + "全部買ったら？ 収支TOP10", ha="left", va="top",
                  color=TEXT, fontsize=44, fontweight="bold")
-        fig.text(0.04, 0.868, f"2025年 JRA全レース ・ 1点100円 ・ 300騎乗以上の{n}人", ha="left", va="top",
+        last = pd.Timestamp(meta["last_date"])
+        span_txt = f"{year}年{last.month}月{last.day}日までのJRA全レース" if meta["partial"] else f"{year}年 JRA全レース"
+        fig.text(0.04, 0.868, f"{span_txt} ・ 1点100円 ・ {meta['min_rides']}騎乗以上の{n}人", ha="left", va="top",
                  color=TEXT2, fontsize=22)
+        if meta["known_gap"]:
+            fig.text(0.04, 0.015, "※データなし: " + meta["known_gap"], ha="left", va="bottom", color=MUTED, fontsize=16)
         cur = dates[0] + pd.Timedelta(days=float(head_x))
-        fig.text(PX, 0.87, "2025年", ha="left", va="bottom", color=TEXT2, fontsize=30)
+        fig.text(PX, 0.87, f"{year}年", ha="left", va="bottom", color=TEXT2, fontsize=30)
         fig.text(PX, 0.865, f"{cur.month}月{cur.day}日", ha="left", va="top",
                  color=TEXT, fontsize=64, fontweight="bold")
 
@@ -485,7 +494,7 @@ def render_race(out_path, stills=None):
                 fig.text(PX, y - 0.042, f"{r.date.month}/{r.date.day}  {names[r.i]} × {r.馬名}",
                          color=TEXT2, fontsize=19, va="center", alpha=fa)
         if a > 0:
-            fig.text(PX, 0.66, "1年間の回収率", color=TEXT, fontsize=30, va="top", fontweight="bold", alpha=a)
+            fig.text(PX, 0.66, f"{last.month}月{last.day}日までの回収率" if meta["partial"] else "1年間の回収率", color=TEXT, fontsize=30, va="top", fontweight="bold", alpha=a)
             for j, i in enumerate(order[:RACE_TOP]):
                 y = 0.59 - j * 0.052
                 fig.text(PX, y, f"{j + 1}", color=MUTED, fontsize=20, fontweight="bold", va="center", alpha=a)
@@ -509,7 +518,11 @@ def render_race(out_path, stills=None):
 if __name__ == "__main__":
     setup_font()
     os.makedirs(os.path.join(HERE, "videos"), exist_ok=True)
-    for k in sys.argv[1:] or list(PRESETS) + ["ranking"]:
+    # ranking は年を付けて指定する（例: ranking2019）。年なしは2025年
+    for k in sys.argv[1:] or ["ranking"]:
         out = os.path.join(HERE, "videos", f"{k}.mp4")
-        render_race(out) if k == "ranking" else render(k, out)
+        if k.startswith("ranking"):
+            render_race(out, year=int(k[7:] or 2025))
+        else:
+            render(k, out)
         print(out)
