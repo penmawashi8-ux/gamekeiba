@@ -39,16 +39,18 @@ def load(root):
     ret["配当"] = ret["配当"].str.replace(",", "").astype(int)
     ret = ret.drop_duplicates(["rid", "式別", "馬番"])
 
-    # 払戻が揃っているレースだけを対象にする
-    rids = set(res["rid"]) & set(ret["rid"])
-    res = res[res["rid"].isin(rids)]
-    ret = ret[ret["rid"].isin(rids)]
+    # 払戻表が欠けているレースがある（約70レース）。単勝は着順と確定オッズから払戻を
+    # 復元できるので全レースで計算し、それ以外の券種は払戻表があるレースだけで計算する
+    full = set(res["rid"]) & set(ret["rid"])
+    ret = ret[ret["rid"].isin(full)]
     # 出走取消・除外は買えない（返還）ので母集団から外す
     runners = res[~res["着順"].isin(["除", "取"])].copy()
 
     pay = {}
     for (rid, kind), g in ret.groupby(["rid", "式別"]):
         pay[(rid, kind)] = dict(zip(g["馬番"], g["配当"]))
+    for rid, g in runners[~runners["rid"].isin(full) & (runners["着順"] == "1")].groupby("rid"):
+        pay[(rid, "単勝")] = {str(n): int(round(o * 100)) for n, o in zip(g["馬番"], g["単勝"])}
 
     # レース名（動画で重賞勝ちを出すのに使う。無くても検証自体はできる）
     names = {}
@@ -56,7 +58,7 @@ def load(root):
     if sched:
         sc = pd.concat(pd.read_csv(f, dtype=str) for f in sched).drop_duplicates("race_id")
         names = dict(zip(sc["race_id"], sc["race_name"]))
-    return runners, pay, names
+    return runners, pay, names, full
 
 
 def key(kind, nums):
@@ -103,12 +105,15 @@ def balance_curve(bets):
 
 def main(root, out):
     os.makedirs(out, exist_ok=True)
-    runners, pay, race_names = load(root)
-    races = runners.groupby("rid")
+    runners, pay, race_names, full = load(root)
+    print(f"払戻表あり: {len(full)}レース（単勝以外はこの範囲で計算）")
+    races = runners[runners["rid"].isin(full)].groupby("rid")
     meta = runners.groupby("rid")["date"].first()
     print(f"対象: {YEAR}年 {runners['rid'].nunique()}レース / のべ{len(runners)}頭")
 
     def single(df, kind="単勝"):
+        if kind != "単勝":
+            df = df[df["rid"].isin(full)]
         return pd.DataFrame({
             "date": df["date"].values, "rid": df["rid"].values,
             "ret": [payout(pay, r, kind, [n]) for r, n in zip(df["rid"], df["馬番"])],
