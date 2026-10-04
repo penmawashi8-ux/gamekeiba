@@ -113,7 +113,10 @@ def main(root, out):
     for p in range(1, 19):
         sel = runners[runners["人気"] == p]
         for kind in ("単勝", "複勝"):
-            s = summarize(f"{p}番人気の{kind}", single(sel, kind))
+            b = single(sel, kind)
+            s = summarize(f"{p}番人気の{kind}", b)
+            if s and p <= 3:
+                curves[f"{p}番人気 {kind}"] = balance_curve(b)
             if s:
                 s.update(人気=p, 券種=kind)
                 rows.append(s)

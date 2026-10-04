@@ -20,6 +20,16 @@ python3 backtest.py /path/to/keiba_ai_ver3.0  # results/ に CSV を出力
 
 `results/累計収支_日別.csv` は日ごとの累計収支で、動画の「残高推移グラフ」にそのまま使える。
 
+### 残高推移のアニメーション動画
+
+```bash
+pip install pandas matplotlib            # ffmpeg と Noto Sans CJK JP（fonts-noto-cjk）も必要
+python3 make_video.py jockey ninki       # → videos/jockey.mp4, videos/ninki.mp4
+```
+
+横 1920x1080・30fps・37秒（タイトル2秒 → 1年分の推移30秒 → 結果5秒）。
+比べる系列は `make_video.py` の `PRESETS` に足せば増やせる。
+
 ## 結果まとめ
 
 ### 0. 元ネタの再現：人気別 単勝（3,355レース）
