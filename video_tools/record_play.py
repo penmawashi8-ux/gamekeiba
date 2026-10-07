@@ -25,6 +25,18 @@ def log(kind, payload=None):
     print(f"[{time.strftime('%H:%M:%S')}] {kind}")
 
 
+def parse_positions(msg):
+    """race_update を {馬番: {progress, finished, rank}} にする。
+
+    今のバックエンドは転送量削減のため p[i] = [進捗, 着順(未確定は0)] の配列（並びは horses と同じ）
+    で送ってくる。古い positions 形式にも対応しておく。
+    """
+    if "p" not in msg:
+        return msg["positions"]
+    return {str(h["number"]): {"progress": prog, "finished": rank > 0, "rank": rank or None}
+            for h, (prog, rank) in zip(state["horses"], msg["p"])}
+
+
 async def spy_task():
     ws = None
     for attempt in range(15):  # バックエンド起動直後でも接続できるようリトライ
@@ -41,12 +53,14 @@ async def spy_task():
             msg = json.loads(raw)
             mt = msg.get("type")
             if mt == "game_state":
-                state.update(phase=msg["phase"], countdown=msg["countdown"],
-                             horses=msg["horses"], win_odds=msg["win_odds"], show_odds=msg["show_odds"])
-                if msg["horses"] and not any(e["kind"] == "horses" for e in events):
+                # 投票受付中の毎秒更新は phase/countdown だけの軽いメッセージ。
+                # 無いフィールドは前回値のまま残す（フロントと同じ扱い）
+                state.update({k: msg[k] for k in ("phase", "countdown", "horses", "win_odds", "show_odds")
+                              if k in msg})
+                if msg.get("horses") and not any(e["kind"] == "horses" for e in events):
                     log("horses", msg["horses"])
                 events.append({"t": time.time(), "kind": "tick",
-                               "data": {"phase": msg["phase"], "countdown": msg["countdown"]}})
+                               "data": {"phase": state["phase"], "countdown": state["countdown"]}})
             elif mt == "odds_update":
                 state.update(win_odds=msg["win_odds"], show_odds=msg["show_odds"])
                 log("odds", {"win": msg["win_odds"], "show": msg["show_odds"]})
@@ -54,7 +68,7 @@ async def spy_task():
                 if state["phase"] != "racing":
                     log("race_start")
                 state["phase"] = "racing"
-                events.append({"t": time.time(), "kind": "race_update", "data": msg["positions"]})
+                events.append({"t": time.time(), "kind": "race_update", "data": parse_positions(msg)})
             elif mt == "results":
                 state["phase"] = "results"
                 log("results", {
