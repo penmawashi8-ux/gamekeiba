@@ -18,10 +18,12 @@ const DEFAULT_GAME: GameState = {
   leaderboard: [],
   onlineLeaderboard: [],
   online: 0,
+  maintenance: { at: null, active: false },
 }
 
 const DEFAULT_USER: UserState = {
   userId: '',
+  publicId: '',
   displayName: '',
   balance: 0,
   myBets: [],
@@ -183,12 +185,19 @@ export function useGameSocket(playerName: string | null) {
             setUser(u => ({
               ...u,
               userId: msg.user_id,
+              publicId: msg.public_id ?? '',
               displayName: msg.display_name,
               balance: msg.balance,
               myBets: [],
               lastPayout: null,
             }))
-            setGame(g => ({ ...g, online: msg.online }))
+            // メンテナンス中なら直後に maintenance が届く。再起動後のサーバーには
+            // 予定が無いので、ここで一旦消しておかないと前の表示が残る
+            setGame(g => ({ ...g, online: msg.online, maintenance: { at: null, active: false } }))
+            break
+
+          case 'maintenance':
+            setGame(g => ({ ...g, maintenance: { at: msg.at ?? null, active: !!msg.active } }))
             break
 
           case 'game_state':

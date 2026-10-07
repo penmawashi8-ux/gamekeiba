@@ -9,7 +9,7 @@ interface Props {
   showOdds: Record<string, [number, number]>
   payouts: PayoutInfo[]
   showPayoutOdds: Record<string, number>
-  myUserId: string
+  myPublicId: string
   countdown: number
   hasBet: boolean
 }
@@ -22,10 +22,10 @@ const PLACE_STYLES = [
 ]
 
 export default function ResultsPanel({
-  ranking, horses, winOdds, showOdds, payouts, showPayoutOdds, myUserId, countdown, hasBet
+  ranking, horses, winOdds, showOdds, payouts, showPayoutOdds, myPublicId, countdown, hasBet
 }: Props) {
   const horseMap = Object.fromEntries(horses.map(h => [h.number, h]))
-  const myPayouts = payouts.filter(p => p.user_id === myUserId)
+  const myPayouts = payouts.filter(p => !!myPublicId && p.public_id === myPublicId)
   const myTotal   = myPayouts.reduce((s, p) => s + p.payout_amount, 0)
   // 旧バックエンドは show_payout_odds を送らず、payouts に CPU を混ぜていたのでそこから拾う
   const showActualOdds: Record<string, number> = {

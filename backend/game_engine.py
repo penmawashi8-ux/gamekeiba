@@ -3,11 +3,12 @@
 import asyncio
 import logging
 import random
+import time
 from typing import List, Dict, Optional, Callable, Awaitable
 
 from horse_engine import Horse, generate_race_horses, TRACK_LENGTH
 from betting import BettingManager
-from user_manager import UserManager
+from user_manager import UserManager, public_id
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,12 @@ class GameEngine:
         self.race_number  = 0
         self._last_payouts: list = []
         self._last_show_payout_odds: Dict[str, float] = {}
+        # このレースの馬券の払い戻しが済んだか。済んでいない馬券はサーバー停止時に返金する
+        self._settled     = True
+        # メンテナンス開始時刻（UNIX秒）。None なら予定なし。
+        # 開始時刻を過ぎたら、次のレースの切れ目で止まる（進行中のレースは最後までやる）
+        self.maintenance_at: Optional[float] = None
+        self.maintenance_active = False
 
     def set_paused(self, value: bool) -> None:
         self.paused = value
@@ -79,12 +86,69 @@ class GameEngine:
         """接続者が現れたことを知らせて、待機中ならレースを始めさせる。"""
         self._resume.set()
 
+    # ── メンテナンス ──────────────────────────────────────────────
+
+    def maintenance_msg(self) -> dict:
+        return {
+            "type":   "maintenance",
+            # ミリ秒（ブラウザの Date にそのまま渡せる形）
+            "at":     int(self.maintenance_at * 1000) if self.maintenance_at else None,
+            "active": self.maintenance_active,
+        }
+
+    def _maintenance_due(self) -> bool:
+        return self.maintenance_at is not None and time.time() >= self.maintenance_at
+
+    async def schedule_maintenance(self, at: float) -> None:
+        """at（UNIX秒）以降の最初のレースの切れ目で止める。全員に予告を出す。"""
+        self.maintenance_at = at
+        await self._broadcast(self.maintenance_msg())
+        # 待機中（誰もいない等）でも開始時刻の判定ができるよう起こす
+        self._resume.set()
+
+    async def cancel_maintenance(self) -> None:
+        self.maintenance_at = None
+        self.maintenance_active = False
+        await self._broadcast(self.maintenance_msg())
+        self._resume.set()
+
+    def refund_unsettled_bets(self) -> int:
+        """払い戻し前の馬券を全額返す。サーバー停止時（デプロイ等）に呼ぶ。
+
+        馬券は買った時点で残高から引いているので、レースの途中で止まると
+        賭け金だけが消えてしまう。返金した人数を返す。
+        """
+        if self._settled:
+            return 0
+        refunds: Dict[str, int] = {}
+        for b in self.betting.get_all_bets():
+            if b.user_id.startswith("bot_"):
+                continue
+            refunds[b.user_id] = refunds.get(b.user_id, 0) + b.amount
+        for uid, amount in refunds.items():
+            self.users.update_balance(uid, amount)
+        self._settled = True
+        if refunds:
+            logger.info("停止前に %d 人へ返金しました（計 %d 円）", len(refunds), sum(refunds.values()))
+        return len(refunds)
+
     async def run(self):
         while True:
             try:
                 # 誰も見ていない間はレースを回さない。
                 # 判定はここ（レースの切れ目）だけなので、レース中に全員が
                 # 抜けても途中で止まらず、そのレースは最後まで進む。
+                if self._maintenance_due():
+                    # メンテナンス開始。ここはレースの切れ目なので払い戻しは済んでいる
+                    self.phase = "waiting"
+                    if not self.maintenance_active:
+                        self.maintenance_active = True
+                        logger.info("メンテナンスのため停止しました")
+                        await self._broadcast(self.maintenance_msg())
+                    self._resume.clear()
+                    if self._maintenance_due():
+                        await self._resume.wait()
+                    continue
                 if self.paused or not self._has_users():
                     self.phase = "waiting"
                     self._resume.clear()
@@ -100,6 +164,8 @@ class GameEngine:
                 raise
             except Exception:
                 logger.exception("Game loop error")
+                # 途中で落ちたレースの馬券は払い戻されないまま次のレースで消えるので返す
+                self.refund_unsettled_bets()
                 await asyncio.sleep(5)
 
     async def _betting_phase(self):
@@ -107,6 +173,7 @@ class GameEngine:
         self.phase = "betting"
         self.horses = generate_race_horses(8)
         self.betting.reset()
+        self._settled = False
         self._last_payouts = []
         self._last_show_payout_odds = {}
         for h in self.horses:
@@ -159,9 +226,12 @@ class GameEngine:
             payouts = self.betting.calculate_payouts(
                 self.race_results[0], self.race_results[1], self.race_results[2]
             )
+            # この時点で払い戻しは確定扱い（以降に止まっても返金しない）
+            self._settled = True
             self._last_payouts = [
                 {
-                    "user_id":       p.user_id,
+                    # user_id はセッションIDそのものなので全員には配らない
+                    "public_id":     public_id(p.user_id),
                     "display_name":  p.display_name,
                     "bet_type":      p.bet_type,
                     "horse":         p.horse,

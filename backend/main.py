@@ -2,6 +2,7 @@
 
 import asyncio
 import datetime
+import hmac
 import json
 import logging
 import os
@@ -9,10 +10,11 @@ import time
 import uuid
 from typing import Dict
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from game_engine import GameEngine
+from user_manager import public_id
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -205,9 +207,53 @@ async def startup():
     logger.info("Game engine started")
 
 
+@app.on_event("shutdown")
+async def shutdown():
+    # Render は再デプロイ時に旧プロセスへ SIGTERM を送る。レース途中なら
+    # 買った馬券が払い戻されないまま消えるので、止まる前に返金しておく。
+    if engine:
+        engine.refund_unsettled_bets()
+
+
 @app.get("/health")
 def health():
-    return {"status": "ok", "dormant": _dormant_reason}
+    return {"status": "ok", "dormant": _dormant_reason,
+            "maintenance": engine.maintenance_msg() if engine else None}
+
+
+# ── メンテナンス（管理用） ─────────────────────────────────────────────
+#
+# デプロイ前に呼ぶと、指定時刻以降の最初のレースの切れ目で止まる（賭けたまま
+# 中断される人が出ない）。止まったらデプロイすれば、新しいプロセスは通常どおり始まる。
+#
+#   curl -X POST -H "X-Admin-Token: $ADMIN_TOKEN" "https://<backend>/admin/maintenance?minutes=5"
+#   curl -X DELETE -H "X-Admin-Token: $ADMIN_TOKEN" "https://<backend>/admin/maintenance"   # 取り消し
+#
+# ADMIN_TOKEN が未設定なら使えない。
+ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
+
+
+def _check_admin(token: str | None):
+    if not ADMIN_TOKEN or not token or not hmac.compare_digest(token, ADMIN_TOKEN):
+        raise HTTPException(status_code=403, detail="forbidden")
+
+
+@app.post("/admin/maintenance")
+async def start_maintenance(minutes: float = 5, x_admin_token: str | None = Header(default=None)):
+    _check_admin(x_admin_token)
+    if not 0 <= minutes <= 24 * 60:
+        raise HTTPException(status_code=400, detail="minutes は 0〜1440")
+    await engine.schedule_maintenance(time.time() + minutes * 60)
+    logger.info("メンテナンスを予約しました（%s分後）", minutes)
+    return engine.maintenance_msg()
+
+
+@app.delete("/admin/maintenance")
+async def stop_maintenance(x_admin_token: str | None = Header(default=None)):
+    _check_admin(x_admin_token)
+    await engine.cancel_maintenance()
+    logger.info("メンテナンスを取り消しました")
+    return engine.maintenance_msg()
 
 
 # ── WebSocket endpoint ────────────────────────────────────────────────
@@ -247,11 +293,14 @@ async def ws_endpoint(websocket: WebSocket):
             "type":         "joined",
             "user_id":      user_id,
             "display_name": name,
+            "public_id":    public_id(user_id),
             "balance":      user["balance"],
             "online":       manager.count,
         }, ensure_ascii=False))
 
         await websocket.send_text(json.dumps(engine.get_snapshot(), ensure_ascii=False))
+        if engine.maintenance_at:
+            await websocket.send_text(json.dumps(engine.maintenance_msg(), ensure_ascii=False))
         await _broadcast_online()
 
         while True:
