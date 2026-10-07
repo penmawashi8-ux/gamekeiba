@@ -24,7 +24,8 @@ export interface Bet {
 }
 
 export interface PayoutInfo {
-  user_id: string
+  // 他人に見せてよい識別子（user_id はセッションIDなので配られない）
+  public_id?: string
   display_name: string
   bet_type: string
   horse: number
@@ -53,14 +54,25 @@ export interface GameState {
   payouts: PayoutInfo[]
   // 複勝の確定オッズ {馬番: 倍率}。payouts には CPU が載らないので別に受け取る
   showPayoutOdds: Record<string, number>
-  leaderboard: [string, number][]
+  leaderboard: RankingRow[]
   // 今接続している人だけの残高ランキング
-  onlineLeaderboard: [string, number][]
+  onlineLeaderboard: RankingRow[]
   online: number
+  maintenance: Maintenance
+}
+
+// [表示名, 残高, public_id]。public_id は古いサーバーだと付かない
+export type RankingRow = [string, number, string?]
+
+export interface Maintenance {
+  at: number | null     // 開始予定（ミリ秒）。null なら予定なし
+  active: boolean       // 停止中
 }
 
 export interface UserState {
   userId: string
+  // ランキングや払い戻し一覧で自分の行を見分ける識別子（名前は重複しうる）
+  publicId: string
   displayName: string
   balance: number
   myBets: Bet[]

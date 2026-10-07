@@ -137,3 +137,6 @@ class BettingManager:
 
     def get_bets_by_user(self, user_id: str) -> List[Bet]:
         return [b for b in self._bets if b.user_id == user_id]
+
+    def get_all_bets(self) -> List[Bet]:
+        return list(self._bets)

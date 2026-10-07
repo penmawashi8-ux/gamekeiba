@@ -6,6 +6,7 @@ Render の無課金プランはディスクが一時領域で、再デプロイ�
 リセットされる。未設定ならローカル開発用に SQLite (users.db) を使う。
 """
 
+import hashlib
 import os
 import sqlite3
 import threading
@@ -20,6 +21,16 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "")
 INITIAL_BALANCE = 10_000
 BROKE_THRESHOLD = 100
 RESTORE_MINUTES = 10
+
+
+def public_id(user_id: str) -> str:
+    """他のプレイヤーに見せてよい識別子。
+
+    user_id はブラウザの localStorage に入っているセッションIDそのもので、
+    知られるとその人として入れてしまう。ランキングや払い戻し一覧など全員に
+    配る情報には、元に戻せないこの値を使う（名前は重複しうるので見分けに使えない）。
+    """
+    return hashlib.sha256(user_id.encode()).hexdigest()[:12]
 
 
 class UserManager:
@@ -190,8 +201,8 @@ class UserManager:
 
     def get_ranking(
         self, limit: int = 5, user_ids: Optional[List[str]] = None
-    ) -> List[Tuple[str, int]]:
-        """残高ランキング。user_ids を渡すとその中だけで順位をつける（オンライン中の人など）"""
+    ) -> List[Tuple[str, int, str]]:
+        """残高ランキング [(表示名, 残高, public_id)]。user_ids を渡すとその中だけで順位をつける（オンライン中の人など）"""
         if user_ids is None:
             where, params = "", ()
         elif not user_ids:
@@ -199,8 +210,8 @@ class UserManager:
         else:
             where = "WHERE user_id IN (" + ", ".join("?" * len(user_ids)) + ") "
             params = tuple(user_ids)
-        return self._run(lambda conn: [tuple(r) for r in self._exec(
+        return self._run(lambda conn: [(name, balance, public_id(uid)) for name, balance, uid in self._exec(
             conn,
-            "SELECT display_name, balance FROM users " + where + "ORDER BY balance DESC LIMIT ?",
+            "SELECT display_name, balance, user_id FROM users " + where + "ORDER BY balance DESC LIMIT ?",
             params + (limit,)
         ).fetchall()])

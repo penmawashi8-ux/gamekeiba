@@ -72,6 +72,25 @@ function PhaseBar({ phase, countdown, raceNumber }: { phase: string; countdown: 
   )
 }
 
+/** メンテナンスの予告と停止中の表示。サーバーが再起動して繋がり直すと消える */
+function MaintenanceBanner({ at, active }: { at: number | null; active: boolean }) {
+  if (active) {
+    return (
+      <div className="bg-indigo-50 border-b border-indigo-200 text-indigo-800 text-center py-2 text-sm px-4">
+        🔧 メンテナンス中です。数分で自動的に再開します（所持金はそのまま残ります）
+      </div>
+    )
+  }
+  if (!at) return null
+  const t = new Date(at)
+  const hhmm = `${t.getHours()}:${String(t.getMinutes()).padStart(2, '0')}`
+  return (
+    <div className="bg-indigo-50 border-b border-indigo-200 text-indigo-800 text-center py-2 text-sm px-4">
+      🔧 {hhmm} 以降、そのとき進行中のレースが終わったらメンテナンスに入ります（数分で再開）
+    </div>
+  )
+}
+
 // 夜間休止。0 で無効（既定）。バックエンドの NIGHT_START_JST と揃えること。
 // Render の無課金プランは無通信15分で自動スリープするため夜間に止める意味がなく、
 // 「おやすみ中」を出している時間帯のほうが機会損失になるので24時間営業にした。
@@ -230,6 +249,7 @@ export default function Home() {
           </div>
         </div>
       </header>
+      <MaintenanceBanner at={game.maintenance.at} active={game.maintenance.active} />
       {connPhase === 'waking' && !connected && (
         <div className="bg-amber-50 border-b border-amber-200 text-amber-800 text-center py-2 text-sm px-4">
           サーバーを起動しています…（最大1分ほどかかります）
@@ -287,12 +307,12 @@ export default function Home() {
         )}
         {isResults && (
           <ResultsPanel ranking={game.raceRanking} horses={game.horses} winOdds={game.winOdds}
-            showOdds={game.showOdds} payouts={game.payouts} showPayoutOdds={game.showPayoutOdds} myUserId={user.userId} countdown={game.countdown}
+            showOdds={game.showOdds} payouts={game.payouts} showPayoutOdds={game.showPayoutOdds} myPublicId={user.publicId} countdown={game.countdown}
             hasBet={user.myBets.length > 0} />
         )}
         {(game.leaderboard.length > 0 || game.onlineLeaderboard.length > 0) && (
           <Leaderboard leaderboard={game.leaderboard} onlineLeaderboard={game.onlineLeaderboard}
-            myName={user.displayName} />
+            myName={user.displayName} myPublicId={user.publicId} />
         )}
       </main>
     </div>

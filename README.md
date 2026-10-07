@@ -64,6 +64,23 @@ WS_URL=ws://127.0.0.1:8000/ws npm run dev
 | `IDLE_SHUTDOWN_MINUTES` | `0` | 無人が続いたら休止。`0` で無効 |
 | `MAX_RUNTIME_HOURS` | `0` | 連続稼働の上限。`0` で無効 |
 | `EXIT_ON_SHUTDOWN` | `0` | `1` でプロセスごと終了。Render では `0`（終了すると再起動ループになる） |
+| `ADMIN_TOKEN` | なし | メンテナンス用の管理APIの合言葉。未設定なら管理APIは使えない |
+
+## メンテナンス（デプロイの前に）
+
+バックエンドを再デプロイするとプロセスが入れ替わり、進行中のレースは消える。
+そのまま出すとレース途中で止まるので、先にメンテナンスを予約する。
+
+```bash
+# 5分後以降、そのとき進行中のレースが終わったら止める（全員の画面に予告が出る）
+curl -X POST -H "X-Admin-Token: $ADMIN_TOKEN" "https://<バックエンド>/admin/maintenance?minutes=5"
+# 取り消し（デプロイせずに再開したいとき）
+curl -X DELETE -H "X-Admin-Token: $ADMIN_TOKEN" "https://<バックエンド>/admin/maintenance"
+```
+
+- 止まるのは「開始時刻を過ぎて最初のレースの切れ目」。賭けたまま中断される人は出ない
+- 止まったのは `/health` の `maintenance.active` が `true` になったことで分かる。そこでデプロイすれば、新しいプロセスは通常どおり始まる
+- 予約せずに再起動した場合も、停止時（SIGTERM）に払い戻し前の馬券は全額返金する
 
 ## 転送量について
 
