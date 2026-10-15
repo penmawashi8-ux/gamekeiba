@@ -10,6 +10,7 @@ import hashlib
 import os
 import sqlite3
 import threading
+import time
 import logging
 from typing import Optional, List, Tuple
 from datetime import datetime, timedelta
@@ -21,6 +22,20 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "")
 INITIAL_BALANCE = 10_000
 BROKE_THRESHOLD = 100
 RESTORE_MINUTES = 10
+
+# 無通信がこの秒数続いたらPostgresの接続を閉じる。
+#
+# Neon は「5分間なにも無ければコンピュートを止める（scale to zero）」が、
+# 接続が開いたままだと活動中とみなされて止まらないことがある。
+# こちらのバックエンドはRenderで24時間動いていて、DBを触るのはレースの
+# 精算とランキング更新のときだけなのに、接続を張りっぱなしにしていた。
+# それだとコンピュートが24時間動き続け、無料枠（月100 CU時間）を
+# 最小構成の0.25 CUでも月182時間ぶん使ってしまう計算になる。
+#
+# Neonの5分より十分手前で閉じておけば、誰も遊んでいない間は止まる。
+# 閉じたあとの再接続は _run が面倒をみる（TLSハンドシェイクのぶん
+# 最初の1クエリが遅くなるだけ）。
+PG_IDLE_CLOSE_SECONDS = int(os.environ.get("PG_IDLE_CLOSE_SECONDS", "60"))
 
 
 def public_id(user_id: str) -> str:
@@ -39,10 +54,42 @@ class UserManager:
         self.database_url = database_url
         self._pg = bool(database_url)
         self._lock = threading.Lock()
-        # 外部DBは接続のたびにTLSハンドシェイクが走るので、接続は使い回す
+        # 外部DBは接続のたびにTLSハンドシェイクが走るので、接続は使い回す。
+        # ただし張りっぱなしだとNeonがスリープできないので、
+        # 無通信が続いたら閉じる（_idle_closer）。
         self._conn = None
+        self._last_used = time.monotonic()
         self._init_db()
+        if self._pg and PG_IDLE_CLOSE_SECONDS > 0:
+            threading.Thread(target=self._idle_closer, daemon=True).start()
         logger.info("UserManager: %s", "Postgres" if self._pg else f"SQLite ({db_path})")
+
+    def close_if_idle(self) -> bool:
+        """無通信が続いていれば接続を閉じる。閉じたら True。"""
+        with self._lock:
+            if self._conn is None:
+                return False
+            if time.monotonic() - self._last_used < PG_IDLE_CLOSE_SECONDS:
+                return False
+            try:
+                self._conn.close()
+            except Exception:
+                pass
+            self._conn = None
+            logger.info("DB接続を閉じた（%d秒以上の無通信）", PG_IDLE_CLOSE_SECONDS)
+            return True
+
+    def _idle_closer(self):
+        # 見張る間隔はしきい値の1/3程度。短すぎても無駄なので1秒以上、
+        # 長すぎると閉じるのが遅れるので30秒以下にする。
+        # 既定の60秒なら20秒おき。
+        interval = max(1, min(PG_IDLE_CLOSE_SECONDS // 3, 30))
+        while True:
+            time.sleep(interval)
+            try:
+                self.close_if_idle()
+            except Exception as e:  # 見張り役がここで死なないように
+                logger.warning("接続のクローズに失敗: %s", e)
 
     def _connect(self):
         if self._pg:
@@ -57,12 +104,14 @@ class UserManager:
         接続エラーのときは1回だけ張り直してやり直す。
         """
         with self._lock:
+            self._last_used = time.monotonic()
             for attempt in (1, 2):
                 if self._conn is None:
                     self._conn = self._connect()
                 try:
                     result = fn(self._conn)
                     self._conn.commit()
+                    self._last_used = time.monotonic()
                     return result
                 except Exception as e:
                     try:
