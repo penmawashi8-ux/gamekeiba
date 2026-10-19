@@ -106,23 +106,27 @@ class UserManager:
         with self._lock:
             self._last_used = time.monotonic()
             for attempt in (1, 2):
-                if self._conn is None:
-                    self._conn = self._connect()
                 try:
+                    # 接続を張るところも再試行の対象にする。無通信で閉じたあとは
+                    # ほぼ毎回ここで張り直すので、一瞬の失敗で処理ごと落とさない
+                    if self._conn is None:
+                        self._conn = self._connect()
                     result = fn(self._conn)
                     self._conn.commit()
                     self._last_used = time.monotonic()
                     return result
                 except Exception as e:
                     try:
-                        self._conn.rollback()
+                        if self._conn is not None:
+                            self._conn.rollback()
                     except Exception:
                         pass
                     if attempt == 2 or not self._is_connection_error(e):
                         raise
                     logger.warning("DB接続を張り直します: %s", e)
                     try:
-                        self._conn.close()
+                        if self._conn is not None:
+                            self._conn.close()
                     except Exception:
                         pass
                     self._conn = None
