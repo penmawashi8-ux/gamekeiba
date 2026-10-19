@@ -4,7 +4,7 @@ import asyncio
 import logging
 import random
 import time
-from typing import List, Dict, Optional, Callable, Awaitable
+from typing import List, Dict, Optional, Callable, Awaitable, Tuple
 
 from horse_engine import Horse, generate_race_horses, TRACK_LENGTH
 from betting import BettingManager
@@ -72,6 +72,9 @@ class GameEngine:
         self._last_show_payout_odds: Dict[str, float] = {}
         # このレースの馬券の払い戻しが済んだか。済んでいない馬券はサーバー停止時に返金する
         self._settled     = True
+        # DBに書けなかった払い戻し [(user_id, 金額)]。消さずに持っておき、書けるまで再試行する
+        self._pending_credits: List[Tuple[str, int]] = []
+        self._retry_task: Optional[asyncio.Task] = None
         # メンテナンス開始時刻（UNIX秒）。None なら予定なし。
         # 開始時刻を過ぎたら、次のレースの切れ目で止まる（進行中のレースは最後までやる）
         self.maintenance_at: Optional[float] = None
@@ -112,12 +115,62 @@ class GameEngine:
         await self._broadcast(self.maintenance_msg())
         self._resume.set()
 
+    def flush_credits_now(self) -> bool:
+        """保留中の払い戻しを1回だけ書きにいく（待たない）。全部書けたら True。"""
+        still: List[Tuple[str, int]] = []
+        for uid, amount in self._pending_credits:
+            try:
+                self.users.update_balance(uid, amount)
+            except Exception as e:
+                still.append((uid, amount))
+                logger.warning("払い戻しをDBに書けません（%s円）: %s", amount, e)
+        self._pending_credits = still
+        if still:
+            logger.error("DBに書けていない払い戻しが %d 件（計 %d 円）残っています",
+                         len(still), sum(a for _, a in still))
+        return not still
+
+    async def _credit(self, items: List[Tuple[str, int]]) -> None:
+        """払い戻しを残高に足す。DBが一時的に繋がらなくても落とさない。
+
+        以前は1件でも失敗すると結果フェーズごと例外で抜け、払い戻しが
+        消えていた（ゴール直後にDBの再接続が失敗すると的中額が0のまま）。
+        失敗したものは保留して間をあけて再試行し、それでもだめなら
+        次のレースの切れ目と停止時にもう一度書きにいく。
+        """
+        self._pending_credits.extend(items)
+        delay = 1.0
+        for _ in range(6):   # 1+2+4+8+15 秒 ≒ 30秒ほど粘る
+            if self.flush_credits_now():
+                return
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, 15)
+        # まだ書けない。レースは先に進めつつ、裏で書けるまで再試行し続ける
+        # （誰も接続していないとレースが回らないので、レースの切れ目任せにはしない）
+        if self._retry_task is None or self._retry_task.done():
+            self._retry_task = asyncio.create_task(self._retry_pending_credits())
+
+    async def _retry_pending_credits(self) -> None:
+        while self._pending_credits:
+            await asyncio.sleep(15)
+            if self.flush_credits_now():
+                logger.info("保留していた払い戻しをDBに書きました")
+
+    def _safe_ranking(self, user_ids: Optional[List[str]] = None) -> list:
+        """ランキングはおまけ。DBが落ちていてもレースの進行やお金の処理を止めない"""
+        try:
+            return self.users.get_ranking(5, user_ids)
+        except Exception as e:
+            logger.warning("ランキングを取得できません: %s", e)
+            return []
+
     def refund_unsettled_bets(self) -> int:
         """払い戻し前の馬券を全額返す。サーバー停止時（デプロイ等）に呼ぶ。
 
         馬券は買った時点で残高から引いているので、レースの途中で止まると
         賭け金だけが消えてしまう。返金した人数を返す。
         """
+        self.flush_credits_now()
         if self._settled:
             return 0
         refunds: Dict[str, int] = {}
@@ -172,6 +225,8 @@ class GameEngine:
         self.race_number += 1
         self.phase = "betting"
         self.horses = generate_race_horses(8)
+        if self._pending_credits:
+            self.flush_credits_now()   # 前のレースで書けなかった払い戻しをもう一度
         self.betting.reset()
         self._settled = False
         self._last_payouts = []
@@ -247,18 +302,32 @@ class GameEngine:
                 # CPU は users テーブルにいない。外部DBへの無駄な往復（1レース数百回）を避ける
                 if p.user_id.startswith("bot_"):
                     continue
-                self.users.update_balance(p.user_id, p.payout_amount)
                 totals[p.user_id] = totals.get(p.user_id, 0) + p.payout_amount
+            if totals:
+                logger.info("第%dR 払い戻し %d 人 計 %d 円", self.race_number, len(totals), sum(totals.values()))
+            await self._credit(list(totals.items()))
 
+            pending = {uid for uid, _ in self._pending_credits}
             for uid, total in totals.items():
-                balance = self.users.get_balance(uid)
+                if uid in pending:
+                    continue   # まだ書けていない。残高を知らせると嘘になる
+                try:
+                    balance = self.users.get_balance(uid)
+                except Exception as e:
+                    logger.warning("払い戻し後の残高を取得できません: %s", e)
+                    continue
                 await self._send_personal(uid, {
                     "type":    "payout_notify",
                     "payout":  total,
                     "balance": balance,
                 })
 
-        for uid, name in self.users.restore_broke_users():
+        try:
+            restored = self.users.restore_broke_users()
+        except Exception as e:
+            logger.warning("破産リセットを実行できません: %s", e)
+            restored = []
+        for uid, name in restored:
             await self._send_personal(uid, {
                 "type":    "restored",
                 "balance": 10_000,
@@ -274,7 +343,7 @@ class GameEngine:
 
     def online_ranking(self) -> list:
         """今接続している人だけの残高ランキング"""
-        return self.users.get_ranking(5, self._online_user_ids())
+        return self._safe_ranking(self._online_user_ids())
 
     def _state_msg(self) -> dict:
         return {
@@ -286,7 +355,7 @@ class GameEngine:
             "win_odds":    {str(k): v for k, v in self.betting.get_win_odds().items()},
             "show_odds":   {str(k): list(v) for k, v in self.betting.get_show_odds_range().items()},
             "pools":       self.betting.get_pools(),
-            "leaderboard": self.users.get_ranking(5),
+            "leaderboard": self._safe_ranking(),
             "online_leaderboard": self.online_ranking(),
         }
 
@@ -331,7 +400,7 @@ class GameEngine:
             "show_odds":   {str(k): list(v) for k, v in self.betting.get_show_odds_range().items()},
             "payouts":     self._last_payouts,
             "show_payout_odds": self._last_show_payout_odds,
-            "leaderboard": self.users.get_ranking(5),
+            "leaderboard": self._safe_ranking(),
             "online_leaderboard": self.online_ranking(),
         }
 
