@@ -217,8 +217,12 @@ async def shutdown():
 
 @app.get("/health")
 def health():
+    # db は Neon のコンピュートがスリープできているかの確認用。
+    # 誰も遊んでいないのに open が true のままなら、接続が居座っていて
+    # 無料枠のCU時間を無駄に使っていることになる。
     return {"status": "ok", "dormant": _dormant_reason,
-            "maintenance": engine.maintenance_msg() if engine else None}
+            "maintenance": engine.maintenance_msg() if engine else None,
+            "db": engine.users.connection_state() if engine else None}
 
 
 # ── メンテナンス（管理用） ─────────────────────────────────────────────
