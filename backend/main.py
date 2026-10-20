@@ -220,7 +220,13 @@ def health():
     # db は Neon のコンピュートがスリープできているかの確認用。
     # 誰も遊んでいないのに open が true のままなら、接続が居座っていて
     # 無料枠のCU時間を無駄に使っていることになる。
+    # online / phase は、誰も遊んでいないのにレースが回り続けていないかの確認用。
+    # db は Neon のコンピュートがスリープできているかの確認用。
+    # 誰も遊んでいないのに open が true のままなら、接続が居座っていて
+    # 無料枠のCU時間を無駄に使っていることになる。
     return {"status": "ok", "dormant": _dormant_reason,
+            "online": manager.count,
+            "phase": engine.phase if engine else None,
             "maintenance": engine.maintenance_msg() if engine else None,
             "db": engine.users.connection_state() if engine else None}
 
