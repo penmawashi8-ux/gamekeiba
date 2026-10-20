@@ -64,6 +64,20 @@ class UserManager:
             threading.Thread(target=self._idle_closer, daemon=True).start()
         logger.info("UserManager: %s", "Postgres" if self._pg else f"SQLite ({db_path})")
 
+    def connection_state(self) -> dict:
+        """接続の状態。/health から見て、Neonがスリープできているかを確認する。
+
+        ロックは取らない。_run がクエリ中に握っているので、
+        ここで待つと /health がクエリに巻き込まれて遅くなる。
+        読むのは2つの値だけで、ずれても判断を誤らせない。
+        """
+        return {
+            "backend": "postgres" if self._pg else "sqlite",
+            "open": self._conn is not None,
+            "idle_sec": int(time.monotonic() - self._last_used),
+            "close_after_sec": PG_IDLE_CLOSE_SECONDS if self._pg else None,
+        }
+
     def close_if_idle(self) -> bool:
         """無通信が続いていれば接続を閉じる。閉じたら True。"""
         with self._lock:
