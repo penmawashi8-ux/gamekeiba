@@ -213,6 +213,13 @@ async def shutdown():
     # 買った馬券が払い戻されないまま消えるので、止まる前に返金しておく。
     if engine:
         engine.refund_unsettled_bets()
+        # 残高の変更はメモリに溜めてまとめて書いているので、
+        # 止まる前に必ず書き出す。これを忘れると最後の数十分が消える。
+        try:
+            written = engine.users.flush()
+            logger.info("終了前に %d 件を書き出しました", written)
+        except Exception:
+            logger.exception("終了前の書き出しに失敗しました")
 
 
 @app.get("/health")

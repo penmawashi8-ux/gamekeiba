@@ -12,7 +12,7 @@ import sqlite3
 import threading
 import time
 import logging
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
@@ -37,6 +37,20 @@ RESTORE_MINUTES = 10
 # 最初の1クエリが遅くなるだけ）。
 PG_IDLE_CLOSE_SECONDS = int(os.environ.get("PG_IDLE_CLOSE_SECONDS", "60"))
 
+# 変更をまとめてDBへ書き出す間隔。
+#
+# Neon の無料枠は「コンピュートが起きていた時間（CU時間）」で消費される。
+# クエリの回数ではないので、問い合わせを軽くしても減らない。減らすには
+# DBをまったく触らない時間を5分以上つくり、Neonをスリープさせるしかない。
+#
+# そこで users テーブルを丸ごとメモリに載せ、読み取りは全部メモリから返し、
+# 書き込みは溜めてこの間隔でまとめて流す。人が遊んでいる間もDBは
+# 「この間隔に1回、数秒」しか触らないので、残りはスリープできる。
+#
+# 代償は、プロセスが落ちたとき最後の書き出しから後の増減が失われること。
+# デプロイや通常終了では shutdown で書き出すので、落ちるのは異常終了のときだけ。
+FLUSH_SECONDS = int(os.environ.get("DB_FLUSH_SECONDS", "0")) or None
+
 
 def public_id(user_id: str) -> str:
     """他のプレイヤーに見せてよい識別子。
@@ -59,10 +73,26 @@ class UserManager:
         # 無通信が続いたら閉じる（_idle_closer）。
         self._conn = None
         self._last_used = time.monotonic()
+
+        # users テーブルの内容をまるごと持つ。読み取りはここからだけ。
+        # {user_id: {"display_name", "balance", "created_at", "updated_at", "broke_at"}}
+        self._cache: Dict[str, dict] = {}
+        self._dirty: set = set()
+        # DBから読み込めているか。読めていないまま書き出すと、
+        # 既存ユーザーの残高を初期値で上書きしてしまうので書き出さない。
+        self._loaded = False
+        self._cache_lock = threading.Lock()
+
         self._init_db()
+        self._load_all()
+
+        self._flush_seconds = FLUSH_SECONDS or (1800 if self._pg else 5)
+        threading.Thread(target=self._flusher, daemon=True).start()
         if self._pg and PG_IDLE_CLOSE_SECONDS > 0:
             threading.Thread(target=self._idle_closer, daemon=True).start()
-        logger.info("UserManager: %s", "Postgres" if self._pg else f"SQLite ({db_path})")
+        logger.info("UserManager: %s / %d件 読み込み / %d秒ごとに書き出し",
+                    "Postgres" if self._pg else f"SQLite ({db_path})",
+                    len(self._cache), self._flush_seconds)
 
     def connection_state(self) -> dict:
         """接続の状態。/health から見て、Neonがスリープできているかを確認する。
@@ -161,6 +191,18 @@ class UserManager:
         return cur
 
     def _init_db(self):
+        """テーブルが無ければ作る。
+
+        DBが落ちていても起動できるように、失敗しても例外は投げない。
+        本番ではテーブルは既にあるので、ここで作れなくても支障はない。
+        作れていない状態での書き出しは flush 側が _loaded で止める。
+        """
+        try:
+            self._create_table()
+        except Exception as e:
+            logger.warning("テーブルを用意できません（DBが落ちている可能性）: %s", e)
+
+    def _create_table(self):
         # 日時は ISO 文字列で持つ（broke_at の比較も文字列で行う）
         self._run(lambda conn: self._exec(conn, """
             CREATE TABLE IF NOT EXISTS users (
@@ -173,112 +215,170 @@ class UserManager:
             )
         """))
 
-    def get_or_create_user(self, user_id: str, display_name: str) -> dict:
-        def fn(conn):
-            row = self._exec(
+    # ── メモリ上の users（読み取りは全部ここから） ────────────────────
+
+    def _load_all(self):
+        """起動時に users テーブルを丸ごと読み込む。
+
+        失敗しても例外は投げない（DBが落ちていてもゲームは遊べるようにする）。
+        読めていない間は書き出しもしない。既存ユーザーの残高を
+        初期値で上書きしてしまうため。
+        """
+        try:
+            rows = self._run(lambda conn: self._exec(
                 conn,
-                "SELECT user_id, display_name, balance FROM users WHERE user_id = ?",
-                (user_id,)
-            ).fetchone()
-            now = datetime.now().isoformat()
-            if row:
-                if row[1] != display_name:
+                "SELECT user_id, display_name, balance, created_at, updated_at, broke_at FROM users",
+            ).fetchall())
+        except Exception as e:
+            logger.warning("usersを読み込めません（DBが落ちている可能性）: %s", e)
+            return
+        with self._cache_lock:
+            for uid, name, balance, created, updated, broke in rows:
+                # DBにある値を正とする。読めていなかった間にメモリだけで
+                # 作られた人は、DBに無ければそのまま残す（次の書き出しで入る）
+                self._cache[uid] = {
+                    "display_name": name, "balance": balance,
+                    "created_at": created, "updated_at": updated, "broke_at": broke,
+                }
+                self._dirty.discard(uid)
+            self._loaded = True
+
+    def _flusher(self):
+        while True:
+            time.sleep(max(1, self._flush_seconds))
+            try:
+                self.flush()
+            except Exception as e:
+                logger.warning("書き出しに失敗（次回また試す）: %s", e)
+
+    def flush(self) -> int:
+        """溜まっている変更をまとめてDBへ書く。書いた件数を返す。
+
+        1回の接続・1トランザクションで済ませる。これが済めば
+        _idle_closer が接続を閉じ、Neonはスリープに入れる。
+        """
+        if not self._loaded:
+            # 読み込めていないので、まず読み込みから
+            self._load_all()
+            if not self._loaded:
+                return 0
+        with self._cache_lock:
+            targets = [(uid, dict(self._cache[uid])) for uid in self._dirty if uid in self._cache]
+        if not targets:
+            return 0
+
+        def fn(conn):
+            for uid, u in targets:
+                # 無ければINSERT、あればUPDATE（SQLiteとPostgresの両対応で素朴に書く）
+                exists = self._exec(
+                    conn, "SELECT 1 FROM users WHERE user_id = ?", (uid,)
+                ).fetchone()
+                if exists:
                     self._exec(
                         conn,
-                        "UPDATE users SET display_name = ?, updated_at = ? WHERE user_id = ?",
-                        (display_name, now, user_id)
+                        "UPDATE users SET display_name = ?, balance = ?, "
+                        "updated_at = ?, broke_at = ? WHERE user_id = ?",
+                        (u["display_name"], u["balance"], u["updated_at"], u["broke_at"], uid),
                     )
-                return {"user_id": row[0], "display_name": display_name, "balance": row[2]}
-            self._exec(
-                conn,
-                "INSERT INTO users (user_id, display_name, balance, created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (user_id, display_name, INITIAL_BALANCE, now, now)
-            )
-            return {"user_id": user_id, "display_name": display_name, "balance": INITIAL_BALANCE}
-        return self._run(fn)
+                else:
+                    self._exec(
+                        conn,
+                        "INSERT INTO users (user_id, display_name, balance, created_at, updated_at, broke_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?)",
+                        (uid, u["display_name"], u["balance"],
+                         u["created_at"], u["updated_at"], u["broke_at"]),
+                    )
+            return len(targets)
+
+        written = self._run(fn)
+        with self._cache_lock:
+            for uid, _ in targets:
+                self._dirty.discard(uid)
+        logger.info("%d件をDBへ書き出した", written)
+        return written
+
+    def pending_writes(self) -> int:
+        with self._cache_lock:
+            return len(self._dirty)
+
+    def _touch(self, user_id: str, **changes):
+        """メモリ上の1件を更新して、書き出し対象に入れる。呼び出し側でロックを握ること。"""
+        u = self._cache[user_id]
+        u.update(changes)
+        u["updated_at"] = datetime.now().isoformat()
+        self._dirty.add(user_id)
+
+    # ── 以下、外から使う操作（すべてメモリ上で完結する） ──────────────
+
+    def get_or_create_user(self, user_id: str, display_name: str) -> dict:
+        with self._cache_lock:
+            u = self._cache.get(user_id)
+            if u is None:
+                now = datetime.now().isoformat()
+                self._cache[user_id] = {
+                    "display_name": display_name, "balance": INITIAL_BALANCE,
+                    "created_at": now, "updated_at": now, "broke_at": None,
+                }
+                self._dirty.add(user_id)
+                return {"user_id": user_id, "display_name": display_name,
+                        "balance": INITIAL_BALANCE}
+            if u["display_name"] != display_name:
+                self._touch(user_id, display_name=display_name)
+            return {"user_id": user_id, "display_name": display_name,
+                    "balance": u["balance"]}
 
     def get_balance(self, user_id: str) -> Optional[int]:
-        def fn(conn):
-            row = self._exec(
-                conn, "SELECT balance FROM users WHERE user_id = ?", (user_id,)
-            ).fetchone()
-            return row[0] if row else None
-        return self._run(fn)
+        with self._cache_lock:
+            u = self._cache.get(user_id)
+            return u["balance"] if u else None
 
     def update_balance(self, user_id: str, delta: int) -> Optional[int]:
-        def fn(conn):
-            row = self._exec(
-                conn, "SELECT balance, broke_at FROM users WHERE user_id = ?", (user_id,)
-            ).fetchone()
-            if row is None:
+        with self._cache_lock:
+            u = self._cache.get(user_id)
+            if u is None:
                 return None
-            new_balance = max(0, row[0] + delta)
-            old_broke_at = row[1]
-            now = datetime.now().isoformat()
-            if new_balance < BROKE_THRESHOLD and old_broke_at is None:
-                broke_at = now
+            new_balance = max(0, u["balance"] + delta)
+            if new_balance < BROKE_THRESHOLD and u["broke_at"] is None:
+                broke_at = datetime.now().isoformat()
             elif new_balance >= BROKE_THRESHOLD:
                 broke_at = None
             else:
-                broke_at = old_broke_at
-            self._exec(
-                conn,
-                "UPDATE users SET balance = ?, updated_at = ?, broke_at = ? WHERE user_id = ?",
-                (new_balance, now, broke_at, user_id)
-            )
+                broke_at = u["broke_at"]
+            self._touch(user_id, balance=new_balance, broke_at=broke_at)
             return new_balance
-        return self._run(fn)
 
     def restore_broke_users(self) -> List[Tuple[str, str]]:
         threshold = (datetime.now() - timedelta(minutes=RESTORE_MINUTES)).isoformat()
-
-        def fn(conn):
-            targets = self._exec(
-                conn,
-                "SELECT user_id, display_name FROM users "
-                "WHERE broke_at IS NOT NULL AND broke_at <= ?",
-                (threshold,)
-            ).fetchall()
-            now = datetime.now().isoformat()
-            for uid, _ in targets:
-                self._exec(
-                    conn,
-                    "UPDATE users SET balance = ?, updated_at = ?, broke_at = NULL WHERE user_id = ?",
-                    (INITIAL_BALANCE, now, uid)
-                )
-            return [tuple(t) for t in targets]
-        return self._run(fn)
+        restored = []
+        with self._cache_lock:
+            for uid, u in self._cache.items():
+                if u["broke_at"] is not None and u["broke_at"] <= threshold:
+                    restored.append((uid, u["display_name"]))
+            for uid, _ in restored:
+                self._touch(uid, balance=INITIAL_BALANCE, broke_at=None)
+        return restored
 
     def restore_user(self, user_id: str) -> Optional[int]:
         """残高がBROKE_THRESHOLD未満のユーザーを即時リセット（手動リクエスト用）"""
-        def fn(conn):
-            row = self._exec(
-                conn, "SELECT balance FROM users WHERE user_id = ?", (user_id,)
-            ).fetchone()
-            if row is None or row[0] >= BROKE_THRESHOLD:
+        with self._cache_lock:
+            u = self._cache.get(user_id)
+            if u is None or u["balance"] >= BROKE_THRESHOLD:
                 return None
-            self._exec(
-                conn,
-                "UPDATE users SET balance = ?, updated_at = ?, broke_at = NULL WHERE user_id = ?",
-                (INITIAL_BALANCE, datetime.now().isoformat(), user_id)
-            )
+            self._touch(user_id, balance=INITIAL_BALANCE, broke_at=None)
             return INITIAL_BALANCE
-        return self._run(fn)
 
     def get_ranking(
         self, limit: int = 5, user_ids: Optional[List[str]] = None
     ) -> List[Tuple[str, int, str]]:
         """残高ランキング [(表示名, 残高, public_id)]。user_ids を渡すとその中だけで順位をつける（オンライン中の人など）"""
-        if user_ids is None:
-            where, params = "", ()
-        elif not user_ids:
+        if user_ids is not None and not user_ids:
             return []
-        else:
-            where = "WHERE user_id IN (" + ", ".join("?" * len(user_ids)) + ") "
-            params = tuple(user_ids)
-        return self._run(lambda conn: [(name, balance, public_id(uid)) for name, balance, uid in self._exec(
-            conn,
-            "SELECT display_name, balance, user_id FROM users " + where + "ORDER BY balance DESC LIMIT ?",
-            params + (limit,)
-        ).fetchall()])
+        with self._cache_lock:
+            if user_ids is None:
+                items = list(self._cache.items())
+            else:
+                wanted = set(user_ids)
+                items = [(uid, u) for uid, u in self._cache.items() if uid in wanted]
+            items.sort(key=lambda kv: kv[1]["balance"], reverse=True)
+            return [(u["display_name"], u["balance"], public_id(uid))
+                    for uid, u in items[:limit]]
