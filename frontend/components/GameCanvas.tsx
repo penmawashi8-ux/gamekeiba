@@ -19,14 +19,30 @@ export default function GameCanvas({ phase, horses, positions, raceRanking, coun
   const canvasRef  = useRef<HTMLCanvasElement>(null)
   const animRef    = useRef<number>(0)
   const localAnimT = useRef<Record<string, number>>({})
-  // 画面に描いている進捗。サーバーからの位置更新は10Hzなので、
-  // 受け取った値へ毎フレーム寄せていって60fpsの滑らかさを保つ。
+  // 画面に描いている進捗。サーバーからの位置更新は5Hzしかないので、
+  // 直近2回の受信から速さを出して先読みし、そこへ毎フレーム寄せて60fpsの滑らかさを保つ。
   const dispProg   = useRef<Record<string, number>>({})
+  const recv       = useRef<Record<string, { p: number; t: number; v: number }>>({})
 
   const stateRef = useRef({ phase, horses, positions, raceRanking, countdown })
   useEffect(() => {
     stateRef.current = { phase, horses, positions, raceRanking, countdown }
   })
+
+  useEffect(() => {
+    const t = performance.now()
+    for (const [key, pos] of Object.entries(positions)) {
+      const prev = recv.current[key]
+      const p = pos.progress
+      let v = 0
+      if (prev && p >= prev.p && t > prev.t) {
+        // 受信間隔のぶれで速さが暴れないよう、前回の速さと混ぜる
+        const inst = (p - prev.p) / ((t - prev.t) / 1000)
+        v = prev.v > 0 ? prev.v * 0.5 + inst * 0.5 : inst
+      }
+      recv.current[key] = { p, t, v }
+    }
+  }, [positions])
 
   useEffect(() => {
     const canvas = canvasRef.current as HTMLCanvasElement
@@ -105,19 +121,23 @@ export default function GameCanvas({ phase, horses, positions, raceRanking, coun
           ctx.fillText(`${h.running_style}  ${h.stars}`, PAD_LEFT + 6, y + 9)
         })
       } else if (phase === 'racing') {
-        // 受信値へ寄せた「表示用の進捗」を作る。
-        // SMOOTHING は 1秒あたりの寄せ具合。受信間隔(約100ms)より速く追従し、
-        // かつ1フレームで飛ばない値にしてある。
-        const SMOOTHING = 14
+        // 受信値から先読みした位置へ寄せた「表示用の進捗」を作る。
+        // 先読みは最大0.4秒まで（更新が途切れたとき走り続けないように）。
+        // SMOOTHING は 1秒あたりの寄せ具合。1フレームで飛ばない値にしてある。
+        const SMOOTHING = 10
         const k = 1 - Math.exp(-SMOOTHING * dt)
         const shown: Record<string, number> = {}
         horses.forEach(h => {
           const key = String(h.number)
-          const target = positions[key]?.progress ?? 0
+          const raw = positions[key]?.progress ?? 0
+          const r = recv.current[key]
+          const ahead = r ? Math.min((now - r.t) / 1000, 0.4) * r.v : 0
+          const target = positions[key]?.finished ? raw : Math.min(1, raw + ahead)
           const prev = dispProg.current[key]
           // 初回とゴール後はそのまま。レースが切り替わったとき前のレースの
-          // 位置から滑って見えるのを防ぐため、後退する場合も即座に合わせる。
-          const next = prev === undefined || target < prev || positions[key]?.finished
+          // 位置から滑って見えるのを防ぐため、大きく後退する場合も即座に合わせる。
+          // 先読みしすぎた分の小さな後退は、飛ばずに寄せる。
+          const next = prev === undefined || target < prev - 0.05 || positions[key]?.finished
             ? target
             : prev + (target - prev) * k
           dispProg.current[key] = next
