@@ -51,6 +51,12 @@ const RECONNECT_DELAYS = [3000, 5000, 10000, 20000, 30000] // ms
 // 累計: 3+5+10+20+30+30 = 98秒
 const ATTEMPTS_BEFORE_DIAGNOSIS = 6
 
+// タブが見えなくなってからこの時間たったら接続を切り、戻ってきたら繋ぎ直す。
+// 開きっぱなしの裏タブにもレース中の位置更新（毎秒数回）を送り続けており、
+// それが Render 無料枠の転送量（月5GB）を食い潰していた。
+// 馬券の精算はサーバー側で接続と無関係に行われるので、切っても損はしない。
+const HIDDEN_DISCONNECT_MS = 60_000
+
 export type ConnPhase = 'connecting' | 'waking' | 'connected' | 'retrying' | 'unreachable' | 'misconfigured'
 
 /** 接続先を実行時に解決する。取れなければビルド時の値を使う。 */
@@ -122,6 +128,8 @@ export function useGameSocket(playerName: string | null) {
   const lastRaceRef  = useRef(0)
   // 一度でも接続できたか。起動待ちと切断後の再接続を言い分けるために使う。
   const everConnected = useRef(false)
+  // 裏タブで自分から切ったか。この間は再接続しない。
+  const suspended     = useRef(false)
 
   const [game, setGame]                 = useState<GameState>(DEFAULT_GAME)
   const [user, setUser]                 = useState<UserState>(DEFAULT_USER)
@@ -146,11 +154,14 @@ export function useGameSocket(playerName: string | null) {
     retryCount.current = 0
 
     const sessionId = getOrCreateSessionId()
+    let wsTarget = ''
+    let hiddenTimer: ReturnType<typeof setTimeout> | null = null
+    suspended.current = false
     setPhase('connecting')
     setAttempts(0)
 
     async function connect(url: string) {
-      if (destroyed.current) return
+      if (destroyed.current || suspended.current) return
 
       // 停止中のインスタンスを毎回先に起こしてから繋ぎにいく。
       // Render は起動が終わるまでこのリクエストを保持するため、
@@ -305,6 +316,9 @@ export function useGameSocket(playerName: string | null) {
       ws.onclose = () => {
         if (destroyed.current) return
         setConnected(false)
+        // 裏タブで自分から切った場合は再接続しない。残高などは戻ってきたときの
+        // joined で上書きされるので、ここでは消さない（一瞬¥0が見えるのを防ぐ）
+        if (suspended.current) return
         setUser(DEFAULT_USER)
 
         retryCount.current += 1
@@ -335,6 +349,7 @@ export function useGameSocket(playerName: string | null) {
       const url = await resolveWsUrl()
       if (cancelled || destroyed.current) return
       setWsUrl(url)
+      wsTarget = url
 
       const problem = configProblem(url)
       if (problem) {
@@ -346,8 +361,36 @@ export function useGameSocket(playerName: string | null) {
       void connect(url)
     })()
 
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        if (hiddenTimer || suspended.current) return
+        hiddenTimer = setTimeout(() => {
+          hiddenTimer = null
+          suspended.current = true
+          if (retryRef.current) clearTimeout(retryRef.current)
+          wsRef.current?.close()
+        }, HIDDEN_DISCONNECT_MS)
+        return
+      }
+      if (hiddenTimer) {
+        clearTimeout(hiddenTimer)
+        hiddenTimer = null
+      }
+      if (suspended.current) {
+        suspended.current = false
+        retryCount.current = 0
+        setAttempts(0)
+        setError(null)
+        setPhase('connecting')
+        if (wsTarget) void connect(wsTarget)
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+
     return () => {
       cancelled = true
+      document.removeEventListener('visibilitychange', onVisibility)
+      if (hiddenTimer) clearTimeout(hiddenTimer)
       destroyed.current = true
       if (retryRef.current) clearTimeout(retryRef.current)
       wsRef.current?.close()

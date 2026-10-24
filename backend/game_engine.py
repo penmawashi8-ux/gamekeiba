@@ -16,8 +16,9 @@ BETTING_SECONDS  = 60
 RESULTS_SECONDS  = 12
 RACE_DT          = 0.05
 # 物理は RACE_DT ごとに進めるが、送信は N ティックに1回にする。
-# 2 なら 10Hz。クライアントは受信間隔を補間して描画する。
-RACE_BROADCAST_EVERY = 2
+# 4 なら 5Hz（2 なら 10Hz）。クライアントは速さから先読みして描画する。
+# 全接続へ毎秒何回も送るので、ここがそのまま Render の転送量になる。
+RACE_BROADCAST_EVERY = 4
 
 BOT_NAMES = [
     "CPU_アラシ", "CPU_カゼマル", "CPU_ホシカゲ", "CPU_タイヨウ", "CPU_ミカヅキ",
