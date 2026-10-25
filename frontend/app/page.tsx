@@ -118,6 +118,35 @@ function NightScreen() {
   )
 }
 
+// 一時休止。この日時までは、サーバーに繋がらないとき休止中の画面を出す。
+// Render 無料枠の転送量（月5GB）を使い切ってワークスペースが止められたため。
+// 裏では接続を試し続けるので、早めに復旧すればそのままゲームに入れる。
+// 期限を過ぎれば通常の「起動しています」表示に戻る。不要になったら null にする。
+// 転送量のリセットは月初（UTCの可能性があるので余裕を見て昼まで）。
+const PAUSED_UNTIL: string | null = '2026-11-01T12:00:00+09:00'
+
+function isPaused(): boolean {
+  return PAUSED_UNTIL !== null && Date.now() < Date.parse(PAUSED_UNTIL)
+}
+
+function PausedScreen() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-300 px-4">
+      <div className="text-center max-w-sm">
+        <div className="text-7xl mb-6">🐴💤</div>
+        <h1 className="text-gray-900 text-2xl font-bold mb-3">ただいま休止中です</h1>
+        <p className="text-gray-600 text-sm mb-1">
+          サーバーの月間通信量の上限に達したため、一時的にお休みしています。
+        </p>
+        <p className="text-gray-600 text-sm mb-4">
+          <span className="font-bold">11月1日ごろ</span>に再開予定です。
+        </p>
+        <p className="text-gray-400 text-xs">再開したらこの画面のまま自動でつながります</p>
+      </div>
+    </div>
+  )
+}
+
 function BrokeModal({ onReset, onDismiss }: { onReset: () => void; onDismiss: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
@@ -159,12 +188,16 @@ export default function Home() {
   const [toast, setToast] = useState<{ msg: string; type: 'win' | 'lose' } | null>(null)
   const [brokeAcknowledged, setBrokeAcknowledged] = useState(false)
   const [isNight, setIsNight] = useState(false)
+  const [paused, setPaused] = useState(false)
   // 夜間は接続しない（サーバーは休止中。無駄な再接続でインスタンスを起こさない）
   const { game, user, connected, error, restoreError, payoutSettled, phase: connPhase, retry, placeBet, requestRestore } =
     useGameSocket(isNight ? null : playerName)
 
   useEffect(() => {
-    const check = () => setIsNight(isNightJST())
+    const check = () => {
+      setIsNight(isNightJST())
+      setPaused(isPaused())
+    }
     check()
     const t = setInterval(check, 60_000)
     return () => clearInterval(t)
@@ -219,6 +252,7 @@ export default function Home() {
   }, [user.lastPayout])
 
   if (isNight && !connected) return <NightScreen />
+  if (paused && !connected) return <PausedScreen />
   if (!playerName) return <LoginScreen onJoin={handleJoin} />
 
   const isBetting = game.phase === 'betting'
