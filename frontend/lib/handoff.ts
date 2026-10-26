@@ -110,7 +110,12 @@ export function tellParent(): void {
   const sessionId = read(SESSION_KEY)
   if (!sessionId) return
   try {
-    window.parent.postMessage({ type: TELL, sessionId, name: read(NAME_KEY) ?? '' }, '*')
+    window.parent.postMessage({
+      type: TELL,
+      sessionId,
+      name: read(NAME_KEY) ?? '',
+      path: window.location.pathname,
+    }, '*')
   } catch {
     // 親に届かなくても遊ぶぶんには支障がない
   }
