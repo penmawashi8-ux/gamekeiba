@@ -136,7 +136,7 @@ function PausedScreen() {
         <div className="text-7xl mb-6">🐴💤</div>
         <h1 className="text-gray-900 text-2xl font-bold mb-3">ただいま休止中です</h1>
         <p className="text-gray-600 text-sm mb-1">
-          サーバーの月間通信量の上限に達したため、一時的にお休みしています。
+          一時的にお休みしています。
         </p>
         <p className="text-gray-600 text-sm mb-4">
           <span className="font-bold">11月1日ごろ</span>に再開予定です。
