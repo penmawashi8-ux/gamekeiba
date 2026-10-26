@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useCallback, useState } from 'react'
+import { getSessionId } from '@/lib/handoff'
 import type { GameState, UserState, Phase, Pools, HorsePosition } from '@/types/game'
 
 const DEFAULT_GAME: GameState = {
@@ -28,16 +29,6 @@ const DEFAULT_USER: UserState = {
   balance: 0,
   myBets: [],
   lastPayout: null,
-}
-
-function getOrCreateSessionId(): string {
-  if (typeof window === 'undefined') return ''
-  let id = localStorage.getItem('keiba_session_id')
-  if (!id) {
-    id = crypto.randomUUID()
-    localStorage.setItem('keiba_session_id', id)
-  }
-  return id
 }
 
 const BUILD_WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000/ws'
@@ -145,7 +136,7 @@ export function useGameSocket(playerName: string | null) {
     destroyed.current  = false
     retryCount.current = 0
 
-    const sessionId = getOrCreateSessionId()
+    const sessionId = getSessionId()
     setPhase('connecting')
     setAttempts(0)
 

@@ -1,6 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import {
+  adoptFromUrl, answerParent, forgetPlayerName,
+  getPlayerName, getSessionId, savePlayerName, tellParent,
+} from '@/lib/handoff'
 import { useGameSocket } from '@/hooks/useGameSocket'
 import { useVersionCheck } from '@/hooks/useVersionCheck'
 import GameCanvas from '@/components/GameCanvas'
@@ -142,17 +146,7 @@ function BrokeModal({ onReset, onDismiss }: { onReset: () => void; onDismiss: ()
   )
 }
 
-const PLAYER_NAME_KEY = 'keiba_player_name'
 const BROKE_THRESHOLD = 100
-
-function getSavedPlayerName(): string | null {
-  if (typeof window === 'undefined') return null
-  return localStorage.getItem(PLAYER_NAME_KEY)
-}
-
-function savePlayerName(name: string) {
-  localStorage.setItem(PLAYER_NAME_KEY, name)
-}
 
 export default function Home() {
   const [playerName, setPlayerName] = useState<string | null>(null)
@@ -172,10 +166,22 @@ export default function Home() {
   const updateAvailable = useVersionCheck()
 
   useEffect(() => {
+    // URLに引き継ぎが載っていれば、search を消す前に受け取る
+    adoptFromUrl()
     if (window.location.search) history.replaceState(null, '', window.location.pathname)
-    const saved = getSavedPlayerName()
+    const saved = getPlayerName()
     if (saved) setPlayerName(saved)
+    return answerParent()
   }, [])
+
+  // ボドゲ広場に埋め込まれているときは、自分が誰かを親ページへ知らせる。
+  // 親は「別タブで大きく開く」のリンクにこれを載せ、新しいタブが
+  // 同じ人として入れるようにする。
+  useEffect(() => {
+    if (!playerName) return
+    getSessionId()
+    tellParent()
+  }, [playerName])
 
   useEffect(() => {
     if (user.balance >= BROKE_THRESHOLD) setBrokeAcknowledged(false)
@@ -199,7 +205,7 @@ export default function Home() {
   }
 
   const handleChangeName = () => {
-    localStorage.removeItem(PLAYER_NAME_KEY)
+    forgetPlayerName()
     setPlayerName(null)
   }
 
